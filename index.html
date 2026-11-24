@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>數字突擊隊 NUMBER SQUAD</title>
+<link rel="icon" href="data:,">
+<style>
+  html,body{margin:0;height:100%;background:#0b0d14;overflow:hidden;touch-action:none}
+  body{position:relative}
+  canvas{display:block;margin:0 auto;height:100%;aspect-ratio:9/16;max-width:100%;background:#1a1d2a}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<!-- 程式未落完之前先出一行字（慢網絡嗰陣唔好成個畫面黑晒）；main.js 一行就收起 -->
+<p id="boot" style="position:absolute;left:0;right:0;top:46%;margin:0;text-align:center;color:#cfd6ea;font:700 16px sans-serif;pointer-events:none">載入中…</p>
+<!-- 3D 戰鬥畫面用：Three.js 係本機檔案，唔靠外網 -->
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}
+</script>
+<!-- 有檔案載入唔到（例如本機伺服器一時間應付唔切）：自動重新載入一次；再唔得就出字叫玩家重新整理 -->
+<script>
+function loadFailed() {
+  var tried = false;
+  try { tried = sessionStorage.getItem('reloaded') === '1'; sessionStorage.setItem('reloaded', '1'); } catch (e) { tried = true; }
+  if (!tried) { location.reload(); return; }
+  var p = document.createElement('p');
+  p.textContent = '載入失敗，請重新整理頁面';
+  p.style.cssText = 'position:absolute;left:0;right:0;top:45%;text-align:center;color:#fff;font:700 18px sans-serif';
+  document.body.appendChild(p);
+}
+</script>
+<script type="module" src="src/main.js" onerror="loadFailed()"></script>
+</body>
+</html>
