@@ -36,7 +36,7 @@ const ARMS = { clip: 'Running forward', at: 3.0 };
 
 export const LEAD_3D = {
   forms: [
-    { model: F1, run: 'run', arms: ARMS, animFrom: null, device: DEVICES.rifle, aura: null },
+    { model: 'leader-v2.glb', run: 'run', arms: ARMS, animFrom: F1, device: DEVICES.rifle, aura: null }, // 新造型（043）；雙臂姿勢照舊借舊形態 I 嗰條動作
     { model: 'falcon-b-f2.glb', run: 'run', arms: ARMS, animFrom: F1, device: DEVICES.cannon, aura: null },
     { model: 'falcon-b-f3.glb', run: 'run', arms: ARMS, animFrom: F1, device: DEVICES.lance, aura: null },
     { model: 'falcon-b-f4.glb', run: 'run', arms: ARMS, animFrom: F1, device: DEVICES.staff, aura: null },
@@ -65,13 +65,29 @@ export const isArmTrack = (name) => /(Left|Right)(Shoulder|Arm|ForeArm|Hand)/.te
  *   devices  手上嘅嘢，可以多過一件。每件多一個 hands：邊隻手揸（'r' 右、'l' 左；兩隻都寫 = 雙手揸）。單手揸嘅嘢 hold[0] 負數 = 喺人物左邊
  *   swing    揮刀：出刀氣嗰下，件嘢嘅 pitch 由 from 度揮到 to 度（time 秒），之後慢慢返位
  *   coat     長褸衫腳修正（見 render3d.js 嘅 fixCoat）：below = 髖骨以下幾多（× 身高）開始算衫腳；keep = 保留幾多成跟腿（其餘跟髖）
+ *   hair     長馬尾修正（fixHair）：keep = 保留幾多成跟手腳；off = 離手臂骨幾遠（× 身高）先當係頭髮；leg = 髖以下離腿骨嘅門檻係 off 嘅幾多倍；low = 髖以下幾多（× 身高）之外唔理
+ *   coat / hair 嘅 tint：點樣由貼圖顏色認出嗰件嘢——min = [色頻, 最少幾多]，over = [[甲, 乙, 倍數]…] 即係「甲 > 乙 × 倍數」全部啱先算。
+ *            換模型（造型、顏色唔同）淨係改呢度，唔使掂程式；冇填 tint 就唔做修正。
  */
 const PISTOL = { shape: 'pistol', length: 0.2, grip: 0.18, left: 0.18, pitch: 4, radius: [0.016, 0.016], around: 0, wrap: 0.75, curl: [70, 70, 50], body: 0x2b2f3a, barrel: 0x15171d, mark: 0xff9a3a };
 export const MATE_3D = {
-  suzu: { model: 'suzu.glb', run: 'run', arms: ARMS, animFrom: F1, aura: '255,150,60',
+  suzu: { model: 'suzu-v2.glb', run: 'run', arms: ARMS, animFrom: F1, aura: '255,150,60', recoil: 'alt',
     devices: [{ ...PISTOL, hands: ['r'], hold: [0.17, -0.02, 0.2] }, { ...PISTOL, hands: ['l'], hold: [-0.17, -0.02, 0.2] }] },
-  kiri: { model: 'kiri.glb', run: 'run', arms: ARMS, animFrom: F1, aura: '70,230,190',
+  kiri: { model: 'kiri-v2.glb', run: 'run', arms: ARMS, animFrom: F1, aura: '70,230,190',
     devices: [{ shape: 'katana', length: 0.7, grip: 0.16, left: 0.06, hold: [0.1, -0.06, 0.12], pitch: 58, radius: [0.014, 0.014], around: 0, wrap: 0.8, curl: [80, 80, 55], body: 0xd8e6e6, barrel: 0x15171d, mark: 0x3fe6b4, hands: ['r', 'l'] }],
     swing: { from: 58, to: -8, time: 0.14, back: 0.35 },
-    coat: { below: 0.02, keep: 0.3 } },
+    coat: { below: 0, keep: 0.15, low: 0.3, tint: { min: ['g', 22], over: [['g', 'r', 1.18], ['g', 'b', 0.85]] } } }, // 新造型（043）：褸披喺膊頭、垂到膝下，深綠色；tint = 貼圖顏色啱呢個條件先算係件褸；low = 髖以下幾多之外唔理（靴）
+  // 楯：右手衝鋒槍、左手大盾（長方形，邊緣鈷藍發光；塊盾企直，面向前）
+  tate: { model: 'tate-v2.glb', run: 'run', arms: ARMS, animFrom: F1, aura: '70,130,255', recoil: 'first',
+    devices: [
+      { shape: 'smg', length: 0.3, grip: 0.3, left: 0.3, hands: ['r'], hold: [0.17, -0.03, 0.2], pitch: 3, radius: [0.016, 0.016], around: 0, wrap: 0.75, curl: [70, 70, 50], body: 0x2a3350, barrel: 0x14171f, mark: 0x4a8cff },
+      { shape: 'shield', length: 0.4, grip: 0, left: 0, hands: ['l'], hold: [-0.17, -0.02, 0.2], pitch: 0, radius: [0.02, 0.02], around: 0, wrap: 0.75, curl: [70, 70, 50], body: 0x24305c, barrel: 0x10162c, mark: 0x4a8cff },
+    ] },
+  // 燈：右膊頭一門榴彈炮；身邊浮住一粒單眼無人機「圓仔」（冇手揸，自己上下浮）。hair：雙馬尾修正（見 render3d.js 嘅 fixHair）
+  akari: { model: 'akari-v2.glb', run: 'run', arms: ARMS, animFrom: F1, aura: '255,90,170', recoil: 'first',
+    devices: [
+      { shape: 'launcher', length: 0.5, grip: 0.42, left: 0.42, hands: ['r'], hold: [0.15, 0.17, 0.02], pitch: 12, radius: [0.05, 0.05], around: 20, wrap: 0.7, curl: [50, 50, 40], body: 0x3a2a4a, barrel: 0x17131f, mark: 0xff5aaa },
+      { shape: 'drone', length: 0.13, grip: 0, left: 0, hands: [], hold: [0.34, 0.3, -0.02], pitch: 0, radius: [0, 0], around: 0, wrap: 0, curl: [0, 0, 0], body: 0xe8eef4, barrel: 0x23283a, mark: 0x3ce6eb, bob: 0.025 },
+    ],
+    hair: { keep: 0.2, low: 0.2, tint: { min: ['r', 110], over: [['r', 'g', 1.7], ['b', 'g', 1.15], ['r', 'b', 1.1]] } } }, // 新造型（043）：馬尾垂到大腿；low = 髖以下幾多之外唔理（桃紅色嘅靴同襪嘅花紋）
 };

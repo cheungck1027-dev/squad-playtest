@@ -2,34 +2,60 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#070912">
 <title>數字突擊隊 NUMBER SQUAD</title>
 <link rel="icon" href="data:,">
 <style>
-  html,body{margin:0;height:100%;background:#0b0d14;overflow:hidden;touch-action:none}
-  body{position:relative}
-  canvas{display:block;margin:0 auto;height:100%;aspect-ratio:9/16;max-width:100%;background:#1a1d2a}
+  /* 遊戲係一條 9:16 嘅直幅，置中；平板同橫向嗰陣兩邊係斜紋邊框背景 */
+  html,body{margin:0;height:100%;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+  body{position:relative;background:#070912 repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0 2px,transparent 2px 16px)}
+  body::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,rgba(47,211,160,.1),transparent 60%);pointer-events:none}
+  canvas{position:relative;display:block;margin:0 auto;height:100%;aspect-ratio:9/16;max-width:100%;background:#141a33;box-shadow:0 0 0 2px rgba(111,242,230,.28),0 0 0 8px rgba(7,9,18,.9),0 0 80px rgba(0,0,0,.9)}
+  /* 手機打橫（畫面太矮，直幅會細到睇唔到）：叫玩家打直 */
+  #rotate{display:none;position:fixed;inset:0;z-index:99;background:#070912;color:#eef2ff;align-items:center;justify-content:center;gap:18px;font:italic 900 18px 'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;letter-spacing:.1em}
+  #rotate svg{width:44px;height:44px;color:#2fd3a0;animation:rot 1.6s ease-in-out infinite}
+  @keyframes rot{0%,20%{transform:rotate(90deg)}60%,100%{transform:rotate(0)}}
+  @media (orientation:landscape) and (max-height:480px){#rotate{display:flex}}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<!-- 程式未落完之前先出一行字（慢網絡嗰陣唔好成個畫面黑晒）；main.js 一行就收起 -->
-<p id="boot" style="position:absolute;left:0;right:0;top:46%;margin:0;text-align:center;color:#cfd6ea;font:700 16px sans-serif;pointer-events:none">載入中…</p>
+<div id="rotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2" fill="currentColor" fill-opacity=".18"/><path d="M11 18.5h2"/></svg>請把手機轉為直向</div>
+<!-- 程式未落完之前先出標誌同一行字（慢網絡嗰陣唔好成個畫面黑晒）；main.js 一行就收起 -->
+<div id="boot" style="position:absolute;left:0;right:0;top:34%;text-align:center;pointer-events:none;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;font-style:italic;font-weight:900">
+  <div style="font-size:min(10vw,5.6vh);color:#fff;text-shadow:0 .08em 0 #2fd3a0,0 0 .5em #070912;letter-spacing:.02em">數字突擊隊</div>
+  <div style="display:inline-block;margin-top:.5em;padding:.2em 1.4em;font-size:13px;letter-spacing:.42em;color:#06261c;background:#2fd3a0;transform:skewX(-14deg)">NUMBER SQUAD</div>
+  <div style="margin-top:9vh;font-size:14px;letter-spacing:.3em;color:#b4bde0;font-style:normal;font-weight:700">載入中…</div>
+</div>
 <!-- 3D 戰鬥畫面用：Three.js 係本機檔案，唔靠外網 -->
 <script type="importmap">
 {"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}
 </script>
 <!-- 有檔案載入唔到（例如本機伺服器一時間應付唔切）：自動重新載入一次；再唔得就出字叫玩家重新整理 -->
 <script>
+// 載入唔到，或者瀏覽器快取咗舊版嘅模組檔（新入口配舊模組，一開就出錯）：將已經攞過嘅程式檔逐個繞過快取重新攞，再自動重新載入一次；
+// 再唔得就出字叫玩家重新整理——唔好永遠停喺「載入中」。遊戲行起身（main.js 收起 #boot）之後嘅錯唔關呢度事。
 function loadFailed() {
+  if (!document.getElementById('boot') || window.__bootFailed) return;
+  window.__bootFailed = true;
   var tried = false;
   try { tried = sessionStorage.getItem('reloaded') === '1'; sessionStorage.setItem('reloaded', '1'); } catch (e) { tried = true; }
-  if (!tried) { location.reload(); return; }
-  var p = document.createElement('p');
-  p.textContent = '載入失敗，請重新整理頁面';
-  p.style.cssText = 'position:absolute;left:0;right:0;top:45%;text-align:center;color:#fff;font:700 18px sans-serif';
-  document.body.appendChild(p);
+  var show = function () {
+    var b = document.getElementById('boot'); if (b) b.style.display = 'none';
+    var p = document.createElement('div');
+    p.innerHTML = '<div style="font-size:18px;margin-bottom:14px">遊戲更新咗，或者載入唔到</div><button style="font:900 16px sans-serif;padding:12px 28px;border:0;background:#2fd3a0;color:#06261c;transform:skewX(-10deg)">重新整理</button>';
+    p.style.cssText = 'position:absolute;left:0;right:0;top:42%;text-align:center;color:#fff;font:700 16px sans-serif;z-index:100';
+    p.querySelector('button').onclick = function () { location.reload(); };
+    document.body.appendChild(p);
+  };
+  if (tried) { show(); return; }
+  var urls = [];
+  try { urls = performance.getEntriesByType('resource').map(function (e) { return e.name; }).filter(function (u) { return /\.(js|json)(\?|$)/.test(u); }); } catch (e) { /* 冇就算 */ }
+  Promise.all(urls.map(function (u) { return fetch(u, { cache: 'reload' }).catch(function () {}); })).then(function () { location.reload(); }, show);
 }
+addEventListener('error', function (ev) { if (ev && (ev.error || /module|export|import|Unexpected/.test(ev.message || ''))) loadFailed(); });
+addEventListener('unhandledrejection', loadFailed);
 </script>
 <script type="module" src="src/main.js" onerror="loadFailed()"></script>
 </body>

@@ -555,9 +555,10 @@ export function drawCount(ctx, view, s, motion) {
 
 // ---------- 介面 ----------
 
-export function drawHud(ctx, view, s) {
+export function drawHud(ctx, view, s, bare = false) {
   const { W, H, u } = view;
-  // 關卡牌同進度條
+  // 關卡牌同進度條（bare = 呢兩樣由網頁元素畫，呢度只畫橫額）
+  if (!bare) {
   slantPanel(ctx, 14 * u, 16 * u, 150 * u, 36 * u, 9 * u, COLORS.panel, 'rgba(255,255,255,.25)');
   setFont(ctx, 21 * u, 800); ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   ctx.fillText(CROWD_TEXT.stage(s.stageNo), 30 * u, 34 * u);
@@ -567,6 +568,7 @@ export function drawHud(ctx, view, s) {
   ctx.strokeStyle = COLORS.cyan; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + (x1 - x0) * k, y); ctx.stroke();
   ctx.fillStyle = COLORS.cyan; ctx.beginPath(); ctx.arc(x0 + (x1 - x0) * k, y, 6 * u, 0, 7); ctx.fill();
   ctx.fillStyle = COLORS.red; ctx.save(); ctx.translate(x1, y); ctx.rotate(Math.PI / 4); ctx.fillRect(-6 * u, -6 * u, 12 * u, 12 * u); ctx.restore();
+  }
   // 橫額：輸、贏、升級
   if (s.banner.t > 0 && !(s.banner.delay > 0)) {
     const a = Math.min(1, s.banner.t * 3), c = s.banner.tone === 'loss' ? COLORS.red : s.banner.tone === 'gain' ? `rgb(${GOOD})` : s.banner.color ? `rgb(${s.banner.color})` : COLORS.gold;

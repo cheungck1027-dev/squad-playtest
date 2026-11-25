@@ -16,7 +16,10 @@ import { ASSET_MANIFEST, CLIP_MANIFEST, unitClipKey, unitCutinKey } from './data
 import { CHARACTERS, MATE_IDS, MAX_MATES, rosterOf } from './data/characters.js';
 import { useNumbers } from './data/column.js';
 import { STAGE_COUNT, campaignNumbers, progressOf } from './data/campaign.js';
-import { applyResult, buyUpgrade, joinedIds, nextStage, setFace, setMateOut, squadMates } from './meta/progress.js';
+import { battleSetup, finishStage, grant, levelUp, pull, skillUp, starUp } from './meta/growth.js';
+import { bumpMax, buy, claimAchievement, claimAllMail, claimChest, claimEndlessTier, claimLogin, claimMail, claimMission, claimOffline, finishEndless, rollDay, startOffline, syncMail } from './meta/live.js';
+import { adoptOldSave, buyUpgrade, joinedIds, nextStage, seenGuideKeys, setFace, setMateOut, squadMates } from './meta/progress.js';
+import { createTutorial } from './meta/tutorial.js';
 import { createCampaignUI } from './meta/ui.js';
 import { WEAPONS } from './data/weapons.js';
 import { CROWD } from './data/crowd.js';
@@ -43,7 +46,11 @@ save.load();
 //   ?squad=falcon,mist,bulwark,lantern,abacus   指定小隊（第一個係隊長）
 //   ?still                                      唔播動畫片段，全部用靜態圖
 //   ?cpukey                                     去背唔用顯示卡，改用處理器後備方法（比較成本用）
-//   ?mates=suzu,kiri                            開發用：直接帶呢啲隊員出戰（唔理入咗隊未）；?mates=0 = 唔帶；唔填 = 照存檔嘅編隊
+//   ?day=2                                      開發用：當而家係幾多日之後（試每日重置、簽到、離線收益）；可以有小數
+//   ?rich=1                                     開發用：送一大批金幣、晶石、素材、招募券同每個角色 200 塊碎片（試養成同招募）
+//   ?guide=0                                    開發用：當所有引導、解鎖說明、故事對話都睇過（自動測試、截圖用）；進度唔郁
+//   ?safe=44,34                                 開發用：模擬瀏海同底部橫條嘅安全區（上, 下，像素），睇介面有冇避開
+//   ?mates=suzu,kiri,tate,akari                 開發用：直接帶呢啲隊員出戰（唔理入咗隊未）；?mates=0 = 唔帶；唔填 = 照存檔嘅編隊
 const params = new URLSearchParams(location.search);
 const mode = params.get('mode') === 'lanes' ? 'lanes' : params.get('mode') === 'top' ? 'top' : 'column';
 const crowd = mode !== 'lanes';        // 單主角、戰力、進化嗰套（頂視版同三線長列版共用）
@@ -59,10 +66,22 @@ if (campaign) {
   if (params.has('gold')) save.updateMeta((m) => { m.gold = Math.max(0, parseInt(params.get('gold'), 10) || 0); });
   if (params.get('unlock') === '1') save.updateMeta((m) => { for (let n = 1; n <= STAGE_COUNT; n++) m.stages[n] = { stars: Math.max(1, m.stages[n]?.stars ?? 0), best: m.stages[n]?.best ?? 0 }; });
 }
+if (campaign) {
+  if (params.get('rich') === '1') save.updateMeta((m) => { grant(m, [{ item: 'gold', n: 200000 }, { item: 'gem', n: 5000 }, { item: 'exp', n: 50000 }, { item: 'core', n: 200 }, { item: 'ticket', n: 30 }, ...['falcon', 'suzu', 'kiri', 'tate', 'akari'].map((id) => ({ item: 'shard', n: 200, id }))]); });
+  save.updateMeta((m) => { adoptOldSave(m); if (params.get('guide') === '0') for (const k of seenGuideKeys(m, true)) m.hints[k] = true; });
+}
 const stageParam = Math.max(0, Math.min(STAGE_COUNT, parseInt(params.get('stage') ?? '0', 10) || 0));
 // 而家打緊第幾關（十關版）；網址有 ?stage / ?weapon / ?form 就唔經標題，直接開打
 let stageNow = campaign ? stageParam || 1 : 1;
 const directStart = !campaign || stageParam > 0 || params.has('weapon') || params.has('form');
+/** 而家幾點（毫秒）。?day=N 可以推後 N 日（開發用）。 */
+const now = () => Date.now() + (parseFloat(params.get('day') ?? '0') || 0) * 864e5;
+/** 每日例行：換日就重置每日任務同商店、推進簽到；睇有冇新信；開始計離線收益。開頁同每次返大廳都做。 */
+const daily = () => save.updateMeta((m) => { rollDay(m, now()); syncMail(m, now()); startOffline(m, now()); });
+/** 而家打緊乜：{ hard } 困難模式、{ endless } 無盡模式；空 = 主線。 */
+let modeNow = {};
+/** 開打第 n 關要用嘅數值同隊伍（基地升級 + 角色養成；網址 ?mates 指定咗就用嗰啲隊員）。 */
+const setupFor = (n, mode = modeNow) => battleSetup(save.data.meta, n, matesParam ?? undefined, mode);
 if (campaign) useNumbers(campaignNumbers(stageNow, save.data.meta.upgrades));
 const want3d = column && params.get('view') !== '2d'; // 戰鬥畫面預設係 3D；?view=2d 開返原本嘅 2D 畫法（規則一樣，對照用）
 const squadParam = (params.get('squad') || '').split(',').map((s) => s.trim()).filter((id) => CHARACTERS[id]);
@@ -87,7 +106,7 @@ const startForm = startWeapon ? WEAPONS[startWeapon - 1].form : Math.max(0, (par
 const matesParam = column && params.has('mates') ? (/^\d+$/.test(params.get('mates')) ? MATE_IDS.slice(0, parseInt(params.get('mates'), 10)) : params.get('mates').split(',').map((v) => v.trim()).filter((id) => MATE_IDS.includes(id))).slice(0, MAX_MATES) : null;
 /** 今場邊啲隊員出戰：網址指定咗就用嗰啲；否則十關版照存檔嘅編隊（入咗隊、冇休息嘅）。 */
 const matesNow = () => matesParam ?? (campaign ? squadMates(save.data.meta) : []);
-const rendererOpts = { noCoat: params.get('coat') === '0', mates: matesParam ?? MATE_IDS.filter((id) => campaign && joinedIds(save.data.meta).includes(id)), screenShake: () => save.data.settings.screenShake, clips, startForm, showFps: params.get('fps') === '1', pixelRatio: parseFloat(params.get('dpr') ?? '') || 0, scene: params.get('scene'), hero: params.get('hero') };
+const rendererOpts = { domHud: campaign, noCoat: params.get('coat') === '0', mates: matesParam ?? MATE_IDS.filter((id) => campaign && joinedIds(save.data.meta).includes(id)), screenShake: () => save.data.settings.screenShake, clips, startForm, showFps: params.get('fps') === '1', pixelRatio: parseFloat(params.get('dpr') ?? '') || 0, scene: params.get('scene'), hero: params.get('hero') };
 // 3D 顯示層用到 Three.js（約 1.3 MB），用到先載入，2D 版唔受影響。部機開唔到 WebGL（或者載入唔到）就用返 2D 畫法。
 let renderer3d = null;
 if (want3d) {
@@ -98,7 +117,8 @@ const view3d = !!renderer3d;
 document.getElementById('boot')?.remove(); // 程式到咗：收起 index.html 嗰行「載入中」（3D 有自己嘅進度畫面）
 const renderer = renderer3d ?? (column ? createColumnRenderer(canvas, assets, rendererOpts) : crowd ? createCrowdRenderer(canvas, assets, rendererOpts) : createBattleRenderer(canvas, assets, rendererOpts));
 const newBattle = (opts) => (column ? createColumnBattle({ startForm, startWeapon, mates: matesNow(), ...opts }) : crowd ? createCrowdBattle({ startForm, ...opts }) : createBattle({ ...startOpts, ...opts }));
-let battle = newBattle({ stageNo: stageNow });
+if (campaign) useNumbers(setupFor(stageNow).numbers);
+let battle = newBattle({ stageNo: stageNow, ...(campaign ? setupFor(stageNow).opts : {}) });
 
 function update(dt) {
   if (column) updateColumn(battle, dt); else if (crowd) updateCrowd(battle, dt); else updateBattle(battle, dt);
@@ -128,6 +148,13 @@ function soundFor(ev) {
     case 'burstReady': audio.play('burst_ready'); break;
     case 'burstGo': audio.play(ev.full ? 'burst_relay' : 'burst_go'); audio.play('burst_hum'); buzz('evolve', 0.2); break;
     case 'mateFire': audio.play(rosterOf(ev.id)?.battle?.sound ?? 'shot_tracer'); break;
+    case 'droneFire': audio.play(rosterOf(ev.id)?.battle?.drone?.sound ?? 'drone'); break;
+    case 'blast': audio.play('grenade'); break;
+    case 'boostIn': audio.play('weapon_up'); break;
+    case 'slowIn': audio.play('gate_bad'); break;
+    case 'waveClear': audio.play('mini_down'); audio.play('win'); audio.music('battle'); break;
+    case 'shieldUp': audio.play('shield_up'); break;
+    case 'shieldBlock': audio.play('shield_block'); buzz('gate_bad', 0.2); break;
     case 'burstEnd': audio.play('burst_end'); break;
     case 'barrierBroken': audio.play('wall_break'); buzz('wall_break', 0.2); break;
     case 'miniBossDown': audio.play('mini_down'); break;
@@ -143,51 +170,84 @@ function soundFor(ev) {
 
 // ---------- 十關版嘅關外流程 ----------
 let ui = null, resultShown = false, userPaused = false;
-const HINTS = [[1.2, 'move', '左右拖動，移動主角'], [6.5, 'gate', '射加數門，個數會越射越大'], [11.5, 'sub', '避開紅色嘅減數門']];
+// 首次遊玩嘅分步引導（meta/tutorial.js）：第 1 關教移動、收磚、射門、揀門、路障、首領；第一次爆發槽滿教撳頭像。教過就記入存檔
+let tutor = null, coachView = null;
+const hint = (key) => save.updateMeta((m) => { m.hints[key] = true; });
 /** 開打第 n 關（照而家嘅升級）。 */
-function startStage(n) {
-  stageNow = Math.max(1, Math.min(STAGE_COUNT, n));
-  useNumbers(campaignNumbers(stageNow, save.data.meta.upgrades));
-  battle = newBattle({ stageNo: stageNow });
+function startStage(n, mode = {}) {
+  modeNow = mode.endless ? { endless: true } : mode.hard ? { hard: true } : {};
+  stageNow = modeNow.endless ? 0 : Math.max(1, Math.min(STAGE_COUNT, n));
+  const setup = setupFor(stageNow);
+  useNumbers(setup.numbers);
+  battle = newBattle({ stageNo: stageNow, ...setup.opts });
   resultShown = false;
+  const H = save.data.meta.hints, teach = { stage: stageNow === 1 && !modeNow.hard && !H.tutor, burst: !H.burst };
+  tutor = teach.stage || teach.burst ? createTutorial(teach) : null; coachView = null;
   audio.music('battle');
   ui?.hide();
   if (!userPaused && startedAt) loop.start();
 }
 function campaignTick() {
-  // 第 1 關嘅引導：頭 15 秒內三句，各出現一次（存檔記住）
-  if (stageNow === 1 && battle.phase === 'run' && ui) for (const [t, key, text] of HINTS) {
-    if (battle.t >= t && battle.t < t + 0.5 && !save.data.meta.hints[key]) { save.updateMeta((m) => { m.hints[key] = true; }); ui.hint(text); }
+  // 分步引導：睇而家出邊一步（世界停唔停由佢話事）；教完就記入存檔
+  if (tutor) {
+    coachView = tutor.tick(battle, TUNING.fixedStep);
+    const H = save.data.meta.hints;
+    if (tutor.stageDone && stageNow === 1 && !H.tutor) hint('tutor');
+    if (tutor.burstDone && !H.burst) hint('burst');
+    if (tutor.done && tutor.burstDone) { tutor = null; coachView = null; }
   }
   // 打完（又停夠咗）：計星數、金幣，存檔，出結算
   if (!resultShown && resultReady(battle)) {
     resultShown = true;
     const won = battle.phase === 'clear';
     let out = null;
+    if (modeNow.endless) { // 無盡模式：記紀錄、派今局獎勵
+      save.updateMeta((m) => { out = finishEndless(m, { wave: battle.wave, dist: battle.dist, kills: battle.kills, bursts: battle.burst.n }, now()); });
+      ui?.endlessResult({ wave: battle.wave, dist: Math.floor(battle.dist), peak: battle.peak, rewards: out.rewards, best: out.best });
+      return;
+    }
     const before = joinedIds(save.data.meta);
     // 進度：行咗關卡幾多成、首領打走幾多成（輸咗嘅金幣按呢個畀）
     const progress = progressOf(battle.dist / battle.stage.len, battle.boss ? 1 - Math.max(0, battle.boss.hp) / battle.boss.max : 0);
-    save.updateMeta((m) => { out = applyResult(m, stageNow, { won, left: battle.power, peak: battle.peak, kills: battle.kills, progress }); });
+    save.updateMeta((m) => { out = finishStage(m, stageNow, { won, left: battle.power, peak: battle.peak, kills: battle.kills, progress, bursts: battle.burst.n }, modeNow); }); // 星數、金幣、關卡掉落、統計
     // 過咗某幾關有新隊員入隊：結算之後插入「新隊員加入」畫面
     const joined = joinedIds(save.data.meta).filter((id) => !before.includes(id));
-    ui?.result({ stageNo: stageNow, won, stars: out.stars, peak: battle.peak, gold: out.gold, firstClear: out.firstClear, joined });
+    ui?.result({ hard: !!modeNow.hard, stageNo: stageNow, won, stars: out.stars, peak: battle.peak, gold: out.gold, firstClear: out.firstClear, drops: out.drops, joined });
   }
 }
 
 try { sessionStorage.removeItem('reloaded'); } catch { /* 冇得用就算 */ } // 今次載入到：下次再失敗可以再自動重試一次（見 index.html）
 
-const loop = createLoop({ update, draw: () => { renderer.draw(battle); ui?.hud(battle); }, step: TUNING.fixedStep });
+/** 路面上一點（x 橫向、d 離隊長幾遠）喺畫面邊度（像素，相對戰鬥畫面左上角）。 */
+const onScreen = (x, d) => { const p = renderer.view?.cam?.project?.(x, d, 0); return p ? { x: p.x, y: p.y } : null; };
+const loop = createLoop({ update, draw: () => { renderer.draw(battle); ui?.hud(battle); ui?.coach(coachView, coachView?.target ? onScreen(coachView.target.x, Math.min(coachView.target.d, 9)) : null, coachView ? onScreen(battle.x, 0) : null); }, step: TUNING.fixedStep });
 if (campaign) {
   // 返到標題／大廳／地圖：戰鬥畫面遮住晒，停咗個循環慳電
   ui = createCampaignUI({ getMeta: () => save.data.meta, onPlay: startStage, onBurst: () => triggerBurst(battle),
     onSquad: (id, out) => { let ok = false; save.updateMeta((m) => { ok = setMateOut(m, id, out); }); return ok; }, onFace: (id) => { let ok = false; save.updateMeta((m) => { ok = setFace(m, id); }); return ok; },
-    onScreen: (name) => { if (['title', 'lobby', 'team', 'detail', 'lineup', 'join', 'map'].includes(name)) loop.stop(); if (['title', 'lobby', 'team', 'detail', 'lineup', 'map', 'upgrades', 'settings'].includes(name)) audio.music('map'); },
+    onScreen: (name) => { if (['loading', 'title', 'lobby', 'team', 'detail', 'lineup', 'join', 'map', 'story', 'gacha', 'missions', 'mailbox', 'shop', 'endless'].includes(name)) loop.stop(); if (['title', 'lobby', 'team', 'detail', 'lineup', 'map', 'upgrades', 'settings', 'story', 'gacha', 'missions', 'mailbox', 'shop', 'endless'].includes(name)) audio.music('map'); },
+    onHint: (key) => hint(key),
+    onSkipTutorial: () => { tutor?.skip(battle); tutor = null; coachView = null; hint('tutor'); hint('burst'); },
+    onReplayTutorial: () => { save.updateMeta((m) => { delete m.hints.tutor; delete m.hints.burst; }); userPaused = false; startStage(1); },
     inBattle: () => battle.phase === 'run' || battle.phase === 'boss',
     onSound: (name) => audio.play(name), onMusic: (name) => audio.music(name), soundNames: () => audio.list(),
     getSettings: () => save.data.settings, onSettings: (patch) => { save.updateSettings(patch); audio.applyVolumes(); },
-    onPause: () => loop.stop(), onResume: () => { if (!userPaused) loop.start(); }, onBuy: (key) => { let ok = false; save.updateMeta((m) => { ok = buyUpgrade(m, key); }); return ok; } });
-  if (!directStart) ui.title();
+    onPause: () => loop.stop(), onResume: () => { if (!userPaused) loop.start(); }, onBuy: (key) => { let ok = false; save.updateMeta((m) => { ok = buyUpgrade(m, key); }); return ok; },
+    // 養成同招募（meta/growth.js）：做到回傳 true；招募回傳每一次嘅結果（唔夠券／晶石回傳 null）
+    onLevel: (id) => { let ok = false; save.updateMeta((m) => { ok = levelUp(m, id); }); return ok; },
+    onStar: (id) => { let ok = false; save.updateMeta((m) => { ok = starUp(m, id); }); return ok; },
+    onSkill: (id, key) => { let ok = false; save.updateMeta((m) => { ok = skillUp(m, id, key); }); return ok; },
+    onPull: (count) => { let res = null; save.updateMeta((m) => { res = pull(m, count, Math.random); }); return res; },
+    // 每日內容（meta/live.js）：領到回傳獎勵，領唔到回傳 null
+    now, getMode: () => modeNow, onDaily: daily, onPlayEndless: () => startStage(0, { endless: true }),
+    onClaim: (kind, id) => { let r = null; save.updateMeta((m) => { const t = now(); r = kind === 'mission' ? claimMission(m, id) : kind === 'chest' ? claimChest(m) : kind === 'ach' ? claimAchievement(m, id) : kind === 'login' ? claimLogin(m, t) : kind === 'offline' ? claimOffline(m, t) : kind === 'mail' ? claimMail(m, id) : kind === 'mailAll' ? claimAllMail(m) : kind === 'shop' ? buy(m, id, t) : kind === 'tier' ? claimEndlessTier(m, id, t) : null; if (kind === 'login') syncMail(m, t); }); return r && r.length ? r : r; } });
+  daily();
+  // 開頁：載入畫面（真進度：模型逐個檔、立繪逐張），到齊自動入標題
+  if (!directStart) ui.loading({ models: renderer3d ? () => renderer3d.loadState() : null, ready: renderer3d ? renderer3d.ready : null });
 }
+// 手機：唔准雙擊放大、兩指縮放、長按彈選單（選字喺樣式度禁咗）
+for (const type of ['dblclick', 'gesturestart', 'gesturechange', 'contextmenu']) addEventListener(type, (ev) => ev.preventDefault(), { passive: false });
+if (params.has('safe')) { const [t, b] = params.get('safe').split(',').map((v) => Math.max(0, parseInt(v, 10) || 0)); document.documentElement.style.setProperty('--sat', `${t}px`); document.documentElement.style.setProperty('--sab', `${b ?? 0}px`); }
 
 addEventListener('resize', renderer.resize);
 renderer.resize();
@@ -248,6 +308,8 @@ globalThis.__game = {
   assets: () => assets.report(),
   /** 全部素材有結果（載入到或者確定冇）先完成 */
   assetsReady: () => assets.ready(),
+  /** 分步引導而家出緊嘅提示（冇就 null）：{ id, text, finger, target, step, total } */
+  tutor: () => coachView,
   /** 而家嘅存檔內容 */
   save: () => save.data,
   setLane: (lane) => setLane(battle, lane),
@@ -281,7 +343,7 @@ globalThis.__game = {
   /** 十關版：meta = 存檔入面嘅進度；screen = 而家關外畫面（'none' = 打緊）；show(名) 開某個畫面；start(n) 開打第 n 關 */
   /** 聲音：sfx('名') 播一把聲；sfxList() 全部名；music('map'|'battle'|'boss'|null)；audio() 狀態（開咗未、幾多把聲、限流擋咗幾多） */
   sfx: (name) => audio.play(name), sfxList: () => audio.list(), music: (name) => audio.music(name), audio: () => audio.report(),
-  campaign: campaign ? { meta: () => save.data.meta, stage: () => stageNow, screen: () => ui.screen, show: (name, arg) => ui[name](arg), start: (n) => startStage(n) } : null,
+  campaign: campaign ? { meta: () => save.data.meta, stage: () => stageNow, screen: () => ui.screen, show: (name, ...args) => ui[name](...args), start: (n, mode) => startStage(n, mode), mode: () => modeNow, now } : null,
   /** 每條動畫片段嘅狀態：playing / paused / loading / fallback（fallback = 用緊靜態圖） */
   clips: () => clips.report(),
   /** 由上次叫到而家嘅每格成本：draw = 成個重繪，clips = 每條片每次去背用幾耐、每秒幾多次 */

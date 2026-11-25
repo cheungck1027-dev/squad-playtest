@@ -152,6 +152,9 @@ const pic = (file) => new URL(`assets/${file}`, GAME_ROOT).href;
  * @property {number} joinAfter   過咗第幾關入隊（0 = 一開始就喺度）
  * @property {number} forms       有幾多個形態（隊員得 1 個）
  * @property {(form: number) => string} portrait  第 form 個形態（0 起計）嘅正面立繪網址
+ * @property {[string, string][]} [faces]  逐個形態嘅頭像裁切位（隊長：形態 I 係新立繪、其餘係舊立繪，位唔同）；冇就全部用 face
+ * @property {[string, string]} face  頭像點由立繪裁出嚟：[放大幾多（CSS background-size）, 位置（background-position）]——換立繪要跟住改
+ * @property {[number, number]} cutin  接力特寫裁立繪邊一截：[由幾高開始, 裁幾高]（都係立繪高度嘅比例）
  * @property {boolean} cutout     立繪有冇透明底（冇：畫面用漸變遮罩淡出四邊）
  * @property {string} color       主題色 'r,g,b'
  * @property {{ name: string, note: string }} burst  爆發技（隊長）／接力嗰一段（隊員）嘅名同說明
@@ -166,7 +169,11 @@ const pic = (file) => new URL(`assets/${file}`, GAME_ROOT).href;
  * 隊員嘅戰鬥數值。每秒輸出 = 隊長而家戰力 ÷ 4 × share（隊長自己係 戰力 ÷ 4 × 武器嘅 out），平均分落每一下；打方陣就係一下倒幾多隻。
  * @typedef {Object} MateBattle
  * @property {number} slot      企位（COLUMN.team.slots 第幾個：0 左後、1 右後、2 左外、3 右外）
- * @property {'gun' | 'blade'} kind  gun = 一粒粒細子彈；blade = 一道道刀氣
+ * @property {'gun' | 'blade' | 'lob'} kind  gun = 一粒粒細子彈；blade = 一道道刀氣；lob = 拋物線榴彈，落地範圍爆炸
+ * @property {number} [burst]   點射：一輪連出幾多下（每輪相隔 interval，輪入面每下相隔 burstGap）
+ * @property {{ every: number, window: number }} [guard]  光盾（楯）：每 every 秒撐起一道，擋走下一次戰力損失；擋嗰刻起 window 秒內嘅損失都唔計
+ * @property {{ half: number, rows: number, time: number, height: number }} [blast]  榴彈（燈）：爆炸半闊、向後冚幾多行、飛幾耐、拋幾高
+ * @property {{ interval: number, share: number, speed: number, range: number, side: number, look: object, sound: string }} [drone]  浮游無人機（燈）：自己隔一陣補一發
  * @property {number} interval  幾耐出一下（秒）
  * @property {number} share     每秒輸出佔隊長戰力幾多（打路障、首領、門）
  * @property {number} near      近距離加成：目標喺 1 以內威力 ×（1 + near），遠過 5 冇加成，中間遞減
@@ -180,8 +187,10 @@ const pic = (file) => new URL(`assets/${file}`, GAME_ROOT).href;
 /** @type {RosterEntry[]} */
 export const ROSTER = [
   {
-    id: 'falcon', name: '隼', title: 'SQUAD LEADER', role: '步槍 · 隊長', chain: 'jue', leader: true, joinAfter: 0, forms: 4, cutout: true, color: '255,150,90',
-    portrait: (form) => pic(`falcon-b-f${Math.max(0, Math.min(3, form)) + 1}-front.webp`),
+    id: 'falcon', name: '隼', title: 'SQUAD LEADER', role: '步槍 · 隊長', chain: 'jue', leader: true, joinAfter: 0, forms: 4, face: ['310%', '50% 7%'], cutin: [0.012, 0.3], cutout: true, color: '255,150,90',
+    // 新造型（043）只換咗形態 I；形態 II–IV 仲係舊立繪，所以頭像裁切位逐個形態寫（faces）
+    portrait: (form) => (form <= 0 ? pic('falcon-v2-front.webp') : pic(`falcon-b-f${Math.max(0, Math.min(3, form)) + 1}-front.webp`)),
+    faces: [['440%', '50% 4.1%'], ['310%', '50% 7%'], ['310%', '50% 7%'], ['310%', '50% 7%']],
     burst: { name: '全彈齊射', note: '6 秒內射速加倍，子彈更粗更亮。' },
     intro: '數字突擊隊隊長。衝在最前面，把「蝕」一塊一塊清掉。', weaponNote: '', joinLine: '', battle: null,
     lines: [
@@ -200,8 +209,8 @@ export const ROSTER = [
     ],
   },
   {
-    id: 'suzu', name: '鈴', title: 'TWIN GUNNER', role: '雙槍 · 速射', chain: 'qi', leader: false, joinAfter: 2, forms: 1, cutout: true, color: '255,150,60',
-    portrait: () => pic('suzu-front.webp'),
+    id: 'suzu', name: '鈴', title: 'TWIN GUNNER', role: '雙槍 · 速射', chain: 'qi', leader: false, joinAfter: 2, forms: 1, face: ['440%', '47.4% 4.1%'], cutin: [0.02, 0.2], cutout: true, color: '255,150,60',
+    portrait: () => pic('suzu-v2-front.webp'),
     burst: { name: '起 · 彈雨開路', note: '接力第一段：雙槍掃出一片彈雨。' },
     intro: '突擊隊的雙槍手。話多、手快，子彈比話更多。',
     weaponNote: '左右手各一把手槍，輪流速射細小的橙黃色子彈。射得最密，單發最弱，適合清前排。',
@@ -220,8 +229,8 @@ export const ROSTER = [
     ],
   },
   {
-    id: 'kiri', name: '霧', title: 'BLADE', role: '直刀 · 近身', chain: 'cheng', leader: false, joinAfter: 4, forms: 1, cutout: true, color: '70,230,190',
-    portrait: () => pic('kiri-front.webp'),
+    id: 'kiri', name: '霧', title: 'BLADE', role: '直刀 · 近身', chain: 'cheng', leader: false, joinAfter: 4, forms: 1, face: ['440%', '51.3% 3%'], cutin: [0.02, 0.2], cutout: true, color: '70,230,190',
+    portrait: () => pic('kiri-v2-front.webp'),
     burst: { name: '承 · 一閃', note: '接力第二段：一刀把缺口劈開。' },
     intro: '突擊隊的刀手。話很少，刀很快，站在誰旁邊誰就安心。',
     weaponNote: '手持直刀，不射子彈。每隔一小段時間向前揮出一道青綠色的刀氣，穿透一整列；目標越近，威力越大。',
@@ -239,6 +248,47 @@ export const ROSTER = [
       '一刀就夠的事，不用兩刀。',
     ],
   },
+  {
+    id: 'tate', name: '楯', title: 'SHIELD GUARD', role: '大盾 · 守護', chain: 'cheng', leader: false, joinAfter: 6, forms: 1, face: ['440%', '47.4% 3.9%'], cutin: [0.02, 0.2], cutout: true, color: '70,130,255',
+    portrait: () => pic('tate-v2-front.webp'),
+    burst: { name: '承 · 壁壘推進', note: '接力：舉盾頂開缺口。' },
+    intro: '突擊隊的盾手。穩重、溫柔，總是站在大家和危險之間。',
+    weaponNote: '左手一面鈷藍邊的大盾，右手衝鋒槍三連點射，火力不高。真正的本事是光盾：每隔一段時間在隊伍前方撐起一道藍色光盾，替全隊擋下一次戰力損失。',
+    joinLine: '我是楯。從今天起，前面交給我來擋。大家都要平安回來喔。',
+    battle: { slot: 2, kind: 'gun', interval: 0.6, burst: 3, burstGap: 0.08, share: 0.12, near: 0, speed: 15, range: 11, half: 0, pierce: 1, alt: 0, sound: 'mate_tate', guard: { every: 10, window: 0.8 },
+      look: { shape: 'tracer', core: '225,238,255', glow: '70,130,255', mix: 0.35, len: 0.13, width: 0.022, flat: 1, halo: 2.4, haloLen: 1.2, hit: 'spark' } },
+    lines: [
+      '指揮官，辛苦了。先坐下來喝杯熱茶，再看作戰圖吧。',
+      '盾擦好了，隨時可以出發。有我在，大家不會有事的。',
+      '鈴又把彈匣到處亂放了……我已經幫她收好啦。',
+      '你已經盯著螢幕很久了。眼睛休息五分鐘，好嗎？',
+      '擋在前面並不可怕。可怕的是回頭看見少了一個人。',
+      '霧其實很怕冷，我給她多準備了一條圍巾。別告訴她是我說的。',
+      '光盾充能需要一點時間。這段時間，請跑在我身後。',
+      '今天也平安回來了呢。這就是最好的戰果。',
+    ],
+  },
+  {
+    id: 'akari', name: '燈', title: 'HEAVY ENGINEER', role: '榴彈炮 · 範圍', chain: 'qi', leader: false, joinAfter: 8, forms: 1, face: ['440%', '55.8% 7.5%'], cutin: [0.02, 0.2], cutout: true, color: '255,90,170',
+    portrait: () => pic('akari-v2-front.webp'),
+    burst: { name: '起 · 煙花開幕', note: '接力：一輪榴彈炸開前路。' },
+    intro: '突擊隊的工程師。鬼馬、自信，最愛炫耀自己的發明，身邊總跟著一隻小無人機。',
+    weaponNote: '肩上一門榴彈炮，射得慢，每發沿拋物線飛出，落地爆炸清走一整片小敵人。身旁的浮游無人機「圓仔」偶爾自己補一發青色光彈。',
+    joinLine: '鏘鏘——天才工程師燈，帶著圓仔登場！這門炮可是我親手改的，要看好囉！',
+    battle: { slot: 3, kind: 'lob', interval: 1.5, share: 0.26, near: 0, speed: 9, range: 9, half: 0, pierce: 1, alt: 0, sound: 'mate_akari', blast: { half: 0.3, rows: 5, time: 0.7, height: 0.9 },
+      drone: { interval: 2.2, share: 0.04, speed: 16, range: 12, side: 0.15, sound: 'drone', look: { shape: 'tracer', core: '225,255,255', glow: '60,230,235', mix: 0.3, len: 0.09, width: 0.026, flat: 1, halo: 2.6, haloLen: 1.1, hit: 'spark' } },
+      look: { shape: 'tracer', core: '255,235,245', glow: '255,90,170', mix: 0.35, len: 0.1, width: 0.05, flat: 1, halo: 2.2, haloLen: 1, hit: 'spark' } },
+    lines: [
+      '指揮官！快看快看，圓仔今天學會轉圈圈了！……雖然本來就會。',
+      '這門榴彈炮的後座力，我調小了百分之十二。厲害吧？誇我誇我。',
+      '一發清一片，這才叫效率。鈴那種一粒一粒打的，嘖嘖。',
+      '圓仔說牠也想要一個徽章。牠沒說？我是牠的翻譯啦。',
+      '楯姐的盾我偷偷加了個杯架。她還沒發現，嘿嘿。',
+      '昨晚又通宵改設計圖了。黑眼圈？這是天才的勳章！',
+      '放心，爆炸範圍我算過的。大概、應該、多半不會波及自己人。',
+      '下一個發明我想做會自己撿磚的機器人。到時候第一個借你用！',
+    ],
+  },
 ];
 
 /** 隊員頁一共幾多格（未加入嘅用剪影）。 */
@@ -248,12 +298,13 @@ export const ROSTER_SLOTS = 6;
 export const rosterOf = (id) => ROSTER.find((r) => r.id === id) ?? null;
 /** 隊員（唔計隊長）。 */
 export const MATE_IDS = ROSTER.filter((r) => !r.leader).map((r) => r.id);
-/** 而家一隊最多帶幾多個隊員出戰（企位有四個，暫時得兩個隊員）。 */
-export const MAX_MATES = 2;
+/** 一隊最多帶幾多個隊員出戰（企位有四個：連隊長五人）。 */
+export const MAX_MATES = 4;
 
-/** 大廳右邊嘅細掣同底部分頁（soon = 未做，撳落去出「即將開放」）。 */
-export const LOBBY_SIDE = [{ id: 'daily', label: '每日\n任務' }, { id: 'event', label: '活動' }, { id: 'mail', label: '信箱' }, { id: 'rank', label: '排行' }];
-export const LOBBY_TABS = [{ id: 'lobby', label: '大廳' }, { id: 'team', label: '隊員' }, { id: 'gacha', label: '招募', soon: true }, { id: 'base', label: '基地' }, { id: 'shop', label: '商店', soon: true }];
+/** 大廳右邊嘅細掣同底部分頁。 */
+// soon = 未做好：介面唔顯示呢個入口（唔出「即將開放」）；做好先拎走 soon。
+export const LOBBY_SIDE = [{ id: 'mission', label: '任務', icon: 'mission', needs: 'mission' }, { id: 'login', label: '簽到', icon: 'gift' }, { id: 'mail', label: '信箱', icon: 'mail' }, { id: 'endless', label: '無盡', icon: 'flag', needs: 'endless' }];
+export const LOBBY_TABS = [{ id: 'lobby', label: '大廳' }, { id: 'map', label: '關卡' }, { id: 'team', label: '隊員' }, { id: 'gacha', label: '招募' }, { id: 'base', label: '基地' }, { id: 'shop', label: '商店' }];
 
 /**
  * 戰鬥入面嘅五個頭像位（左到右）：中間係隊長；隊員照企位排——左外、左後、隊長、右後、右外。冇人嘅位係空插槽。
@@ -272,10 +323,14 @@ export function chainComplete(ids) {
   const have = new Set(ids.map((id) => rosterOf(id)?.chain).filter(Boolean));
   return ['qi', 'cheng', 'jue'].every((k) => have.has(k));
 }
-/** 完整爆發嘅接力次序（起、承、決各一個人）。唔齊就回傳 null。 */
+/**
+ * 完整爆發嘅接力次序：起、承、決各至少一個人先成立（唔齊就回傳 null）。隊入面有幾多人就接幾多段——照 起 → 承 → 決 排，同一段位嘅照角色表次序；
+ * 同一段位有兩個人，嗰段就出兩個特寫，爆發亦都加強（見 data/column.js 嘅 fullBurst：每多一個人，時間同倍率再加）。
+ */
 export function chainOrder(ids) {
-  const pick = (k) => ids.find((id) => rosterOf(id)?.chain === k), out = [pick('qi'), pick('cheng'), pick('jue')];
-  return out.every(Boolean) ? out : null;
+  const list = [...new Set(ids)].filter((id) => rosterOf(id)), of = (k) => ROSTER.filter((r) => r.chain === k && list.includes(r.id)).map((r) => r.id);
+  const qi = of('qi'), cheng = of('cheng'), jue = of('jue');
+  return qi.length && cheng.length && jue.length ? [...qi, ...cheng, ...jue] : null;
 }
 
 /** 呢隊人放唔放得爆發技：有隊長就得（三段齊係完整版，唔齊係單人版）。 */

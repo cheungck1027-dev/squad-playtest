@@ -135,6 +135,7 @@ export const COLUMN = {
     contactD: 0.55,
     size: 0.3,           // 喺主角嗰條線佔畫面高度幾多
     engageD: 16,         // 入到呢個距離當係開始打首領（介面用）
+    repel: 4,            // 翻盤：首領畀光盾／爆發頂返後幾遠（即係多幾秒火力）
   },
 
   /**
@@ -147,7 +148,7 @@ export const COLUMN = {
    */
   burst: { brick: 0.2, phalanx: 0.22, gate: 0.1, wall: 0.08, time: 6, mul: 2, cutTime: 0.8, slowScale: 0.25,
     // 完整爆發（起、承、決三個人都喺隊）：三個人逐個出特寫（合共 cutTime 秒），之後 time 秒內全隊射速 × mul
-    full: { time: 8, mul: 2.5, cutTime: 1.5 } },
+    full: { time: 8, mul: 2.5, cutTime: 1.5, extra: { time: 1, mul: 0.25, cutTime: 0.45 } } }, // extra：接力多過三個人，每多一個再加（五人 = 10 秒、×3、特寫 2.4 秒）
   /**
    * 隊伍（039 鋪路，040 有真隊員）。隊長加最多四個隊員（邊個、打法、數值喺 data/characters.js 嘅 ROSTER）：
    *   slots   每個企位相對隊長嘅位置 [橫向, 前後]（世界單位；前後負數 = 喺隊長後面）。次序：左後、右後、左外、右外
@@ -310,7 +311,7 @@ export function useNumbers(name) {
  * 路障唔加：佢哋嘅數字係照「專心打啱啱打得爆」配嘅，加咗就一定打唔爆。試玩版只係等過關之後有嘢繼續打，未認真編排。
  */
 export function columnStage(no) {
-  if (COLUMN.numbers.campaign) return COLUMN.numbers.stages[0]; // 十關版：呢套數值就係為呢一關生成嘅
+  if (COLUMN.numbers.campaign || COLUMN.numbers.endless) return COLUMN.numbers.stages[0]; // 主線／無盡：呢套數值就係為呢一關生成嘅
   const list = COLUMN.numbers.stages, last = list.length, base = list[Math.min(no, last) - 1], k = Math.max(0, no - last);
   if (!k) return base;
   const lane = (l) => (l && l.type === 'phalanx' ? { ...l, rows: Math.round(l.rows * (1 + 0.15 * k)) } : l);
@@ -324,6 +325,8 @@ export function columnStage(no) {
 /** 玩家睇到嘅字（其餘照用 data/crowd.js 嘅 CROWD_TEXT）。 */
 export const COLUMN_TEXT = {
   blocked: '擋住！',
+  guarded: '光盾擋下！',
+  shieldDown: '破盾！', slowZone: '減速', boostZone: '加速', shieldTag: '盾', boost: '加速！', repelGuard: '光盾頂住！', repelBurst: '背水爆發！', wave: (w) => `第 ${w} 波`,
   broken: '打爆！',
   hazard: '危險',
   slam: '閃開！',
@@ -340,3 +343,15 @@ export const COLUMN_TEXT = {
   tapNext: '撳一下去下一關',
   tapRetry: '撳一下再嚟',
 };
+
+const fullCache = new Map();
+/** 完整爆發嘅數值：n = 接力有幾多個人（三個 = 基本；每多一個，時間、倍率、特寫時間再加 extra）。 */
+export function fullBurst(n = 3) {
+  const F = COLUMN.burst.full, k = Math.max(0, Math.round(n) - 3);
+  if (!k) return F;
+  if (!fullCache.has(k)) fullCache.set(k, { ...F, time: F.time + F.extra.time * k, mul: F.mul + F.extra.mul * k, cutTime: F.cutTime + F.extra.cutTime * k });
+  return fullCache.get(k);
+}
+/** 一個爆發狀態（state.burst）用緊邊套數值。 */
+export const burstOf = (burst) => (burst?.full ? fullBurst(burst.order?.length ?? 3) : COLUMN.burst);
+

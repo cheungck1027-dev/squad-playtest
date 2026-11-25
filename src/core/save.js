@@ -18,10 +18,18 @@ export const SAVE_VERSION = 2;
  * @property {Record<string, { stars: number, best: number }>} stages   每關最高星數同最高戰力（key = 關數）
  * @property {Record<string, boolean>} hints                            睇過嘅引導
  * @property {{ rest: string[], face: string }} squad                   編隊：唔出戰嘅隊員、大廳看板角色
+ * @property {number} gems                                              晶石
+ * @property {{ exp: number, core: number, ticket: number }} items      素材：訓練數據、突破核心、招募券
+ * @property {Record<string, number>} shards                            每個角色嘅碎片
+ * @property {Record<string, { lv: number, br: number, star: number, sb: number, sp: number, own: boolean }>} chars  角色養成：等級、突破次數、星、爆發技級、被動級、係咪由招募攞到
+ * @property {{ pity: number, total: number }} gacha                    招募：連續幾多次冇出傳說、合共抽咗幾多次
  */
 
 /** @returns {MetaSave} */
-export const defaultMeta = () => ({ gold: 0, upgrades: { power: 0, weapon: 0, income: 0 }, stages: {}, hints: {}, squad: { rest: [], face: '' } });
+export const defaultMeta = () => ({ gold: 0, upgrades: { power: 0, weapon: 0, income: 0 }, stages: {}, hints: {}, squad: { rest: [], face: '' },
+  gems: 0, items: { exp: 0, core: 0, ticket: 0, wild: 0 }, shards: {}, chars: {}, gacha: { pity: 0, total: 0 },
+  // 每日內容（041 第四部分；計算見 meta/live.js）：統計、每日任務、成就、簽到、離線收益、信箱、商店、無盡模式、困難模式紀錄
+  stats: {}, daily: null, ach: {}, login: { last: '', streak: 0, got: '' }, loginFull: false, offline: { at: 0 }, mail: [], mailSent: {}, shop: null, endless: { best: 0, bestDist: 0, week: '', weekBest: 0, got: [], runs: [] }, hard: {}, rally: null });
 
 /** @returns {SaveData} */
 export function defaultSave() {
@@ -77,8 +85,28 @@ export function cleanMeta(raw) {
     if (n > 0 && v && typeof v === 'object') out.stages[n] = { stars: Math.min(3, int(v.stars)), best: int(v.best, Number.MAX_SAFE_INTEGER) };
   }
   if (m.hints && typeof m.hints === 'object') for (const [k, v] of Object.entries(m.hints)) if (v === true && /^[a-z]{1,20}$/i.test(k)) out.hints[k] = true;
-  // 編隊（040 加；舊存檔冇呢欄 = 入咗隊嘅全部出戰、看板係隊長）：rest = 唔出戰嘅隊員 id；face = 大廳看板角色 id（'' = 隊長）
   const id = (v) => typeof v === 'string' && /^[a-z]{1,20}$/.test(v);
+  // 編隊（040 加；舊存檔冇呢欄 = 入咗隊嘅全部出戰、看板係隊長）：rest = 唔出戰嘅隊員 id；face = 大廳看板角色 id（'' = 隊長）
+  // 養成同招募（041 第三部分加；舊存檔冇呢幾欄 = 全部由零開始，角色 1 級 1 星）
+  out.gems = int(m.gems);
+  for (const k of Object.keys(out.items)) out.items[k] = int(m.items?.[k]);
+  if (m.shards && typeof m.shards === 'object') for (const [k, v] of Object.entries(m.shards)) if (id(k) && int(v) > 0) out.shards[k] = int(v, 1e6);
+  if (m.chars && typeof m.chars === 'object') for (const [k, v] of Object.entries(m.chars)) if (id(k) && v && typeof v === 'object') {
+    const br = Math.min(5, int(v.br)), one = (x, max) => Math.max(1, Math.min(max, int(x) || 1));
+    out.chars[k] = { lv: Math.min(one(v.lv, 60), 10 * (br + 1)), br, star: one(v.star, 5), sb: one(v.sb, 10), sp: one(v.sp, 10), own: v.own === true };
+  }
+  if (m.gacha && typeof m.gacha === 'object') out.gacha = { pity: int(m.gacha.pity, 999), total: int(m.gacha.total, 1e9) };
+  // 每日內容：逐欄檢查（舊存檔冇 = 預設）
+  const obj = (v) => v && typeof v === 'object' && !Array.isArray(v), day = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : ''), nums = (v) => { const o = {}; if (obj(v)) for (const [k, x] of Object.entries(v)) if (/^[a-zA-Z]{1,20}$/.test(k) && int(x) > 0) o[k] = int(x); return o; }, flags = (v) => { const o = {}; if (obj(v)) for (const [k, x] of Object.entries(v)) if (/^[a-zA-Z]{1,20}$/.test(k) && x === true) o[k] = true; return o; }, ids = (v) => (Array.isArray(v) ? [...new Set(v.filter(id))].slice(0, 40) : []);
+  out.stats = nums(m.stats); out.ach = flags(m.ach); out.mailSent = flags(m.mailSent); out.loginFull = m.loginFull === true;
+  if (obj(m.daily) && day(m.daily.day)) out.daily = { day: m.daily.day, base: nums(m.daily.base), max: nums(m.daily.max), got: ids(m.daily.got), chest: m.daily.chest === true };
+  if (obj(m.login)) out.login = { last: day(m.login.last), streak: Math.min(7, int(m.login.streak)), got: day(m.login.got) };
+  if (obj(m.offline)) out.offline = { at: int(m.offline.at, 1e15) };
+  if (Array.isArray(m.mail)) out.mail = m.mail.filter((x) => obj(x) && id(x.id)).slice(0, 40).map((x) => ({ id: x.id, at: int(x.at, 1e15), got: x.got === true }));
+  if (obj(m.shop) && day(m.shop.day)) out.shop = { day: m.shop.day, bought: nums(m.shop.bought) };
+  if (obj(m.endless)) out.endless = { best: int(m.endless.best, 9999), bestDist: int(m.endless.bestDist, 1e9), week: day(m.endless.week), weekBest: int(m.endless.weekBest, 9999), got: Array.isArray(m.endless.got) ? [...new Set(m.endless.got.map((x) => int(x, 99)))].slice(0, 20) : [], runs: Array.isArray(m.endless.runs) ? m.endless.runs.filter(obj).slice(0, 20).map((x) => ({ wave: int(x.wave, 9999), dist: int(x.dist, 1e9), at: int(x.at, 1e15) })) : [] };
+  if (obj(m.rally) && int(m.rally.n, 999) > 0) out.rally = { n: int(m.rally.n, 999), hard: m.rally.hard === true, fails: int(m.rally.fails, 99) };
+  if (obj(m.hard)) for (const [k, v] of Object.entries(m.hard)) { const n = int(k, 999); if (n > 0 && obj(v)) out.hard[n] = { stars: Math.min(3, int(v.stars)), best: int(v.best, Number.MAX_SAFE_INTEGER) }; }
   if (m.squad && typeof m.squad === 'object') { if (Array.isArray(m.squad.rest)) out.squad.rest = [...new Set(m.squad.rest.filter(id))].slice(0, 20); if (id(m.squad.face)) out.squad.face = m.squad.face; }
   return out;
 }

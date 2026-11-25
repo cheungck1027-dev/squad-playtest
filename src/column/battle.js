@@ -7,7 +7,8 @@
 // 輸 / 贏之後停喺結算畫面，等玩家撳（confirmResult）先重開 / 入下一關，唔會自動行落去。
 
 import { CROWD, CROWD_TEXT } from '../data/crowd.js';
-import { COLUMN, COLUMN_TEXT, columnStage, niceNumber } from '../data/column.js';
+import { COLUMN, COLUMN_TEXT, burstOf, columnStage, niceNumber } from '../data/column.js';
+import { MECH, endlessWave } from '../data/campaign.js';
 import { setPower, setTarget, sideLimit } from '../crowd/battle.js';
 import { stepLean } from '../crowd/feel.js';
 import { applyGate, evolutionLevel, gateIndexAt, gateLabel, gateSegment, isGoodGate, shootGate, squadRadius } from '../crowd/rules.js';
@@ -37,6 +38,8 @@ export function createColumnBattle(opts = {}) {
     startForm: Math.max(0, Math.min(Math.floor(opts.startForm ?? 0) || 0, CROWD.evolution.thresholds.length)),
     startWeapon: Math.max(0, Math.min(Math.floor(opts.startWeapon ?? 0) || 0, WEAPONS.length)),
     mateIds: [...new Set(Array.isArray(opts.mates) ? opts.mates : [])].filter((id) => MATE_IDS.includes(id)).slice(0, MAX_MATES),
+    // 養成（meta/growth.js 嘅 battleSetup）：mateCfg = 每個隊員養成後嘅戰鬥數值（冇就用角色表嗰份）；boost = 隊長同全隊嘅加成
+    mateCfg: opts.mateCfg ?? null, boost: { charge: 1, burstTime: 0, burstMul: 0, ...(opts.boost ?? {}) },
   });
   enterStage(state, opts.stageNo ?? 1);
   return state;
@@ -66,7 +69,13 @@ export function enterStage(state, no) {
   state.burst = { charge: 0, cut: 0, t: 0, n: 0, go: false, full: false, order: null };
   // 隊伍：隊長（state.x）加 mates。每個隊員：id、cfg 戰鬥數值、x 而家橫向位置（跟隊長，有延遲）、d 前後、cd 幾耐之後再出手、shot 出咗幾多下、fireT 啱啱出手（畫面用）
   const T = COLUMN.team;
-  state.team = { mates: (state.mateIds ?? []).map((id, i) => { const cfg = rosterOf(id).battle, sl = T.slots[cfg.slot]; return { id, cfg, x: sl[0], d: sl[1], cd: cfg.interval * (0.4 + 0.3 * i), shot: 0, fireT: 0, lag: 1 - 0.18 * i }; }) };
+  state.team = { mates: (state.mateIds ?? []).map((id, i) => { const cfg = state.mateCfg?.[id] ?? rosterOf(id).battle, sl = T.slots[cfg.slot]; return { id, cfg, x: sl[0], d: sl[1], cd: cfg.interval * (0.4 + 0.3 * i), shot: 0, fireT: 0, lag: 1 - 0.18 * i, dcd: cfg.drone ? cfg.drone.interval * 0.6 : 0 }; }) };
+  // 榴彈（燈）：飛緊嘅 { x, d, x0, d0, t, T, ent, ox, od }；光盾（楯）：up = 撐緊（下一次損失會擋走）、cd 仲有幾耐撐返起、t 擋咗之後嘅無敵時間、n 擋咗幾多次、saved 擋走咗幾多戰力
+  state.shells = [];
+  // 路面機關：mud = 企緊減速帶（仲有幾耐先當離開）；rapid = 加速帶效果仲有幾耐。翻盤：同首領比拼輸梗嗰陣，光盾／儲滿嘅爆發各可以頂返一次
+  state.mud = 0; state.rapid = 0; state.repel = { guard: false, burst: false }; state.wave = state.stage.endless ? 1 : 0;
+  const guard = state.team.mates.find((m) => m.cfg.guard)?.cfg.guard;
+  state.guard = guard ? { cfg: guard, up: false, cd: guard.every * 0.5, t: 0, n: 0, saved: 0, flash: 0 } : null;
   state.burst.order = null;
 }
 
@@ -76,7 +85,7 @@ export function enterStage(state, no) {
 function chargeBurst(state, amount) {
   const b = state.burst;
   if (!b || b.t > 0 || b.cut > 0 || b.charge >= 1 || !(amount > 0)) return;
-  b.charge = Math.min(1, b.charge + amount);
+  b.charge = Math.min(1, b.charge + amount * (state.boost?.charge ?? 1));
   if (b.charge >= 1) state.events.push({ type: 'burstReady' });
 }
 
@@ -93,11 +102,19 @@ export function triggerBurst(state) {
   // 起、承、決三個人都喺隊：完整爆發，照次序接力（一下撳就得，唔使逐個撳）
   b.order = chainOrder(['falcon', ...state.team.mates.map((m) => m.id)]); b.full = !!b.order;
   b.charge = 0; b.cut = burstCfg(state).cutTime; b.n++; b.go = true;
+  b.T = burstCfg(state).time; b.M = burstCfg(state).mul; // 今次爆發合共幾耐、幾多倍（畫面用）
   return true;
 }
 
 /** 而家呢次爆發用邊套數（完整 / 單人）：{ time, mul, cutTime }。 */
-export const burstCfg = (state) => (state.burst?.full ? COLUMN.burst.full : COLUMN.burst);
+export function burstCfg(state) {
+  const base = burstOf(state.burst), B = state.boost, time = B?.burstTime ?? 0, mul = state.burst?.full ? B?.burstMul ?? 0 : 0; // 倍率加成淨係接力（完整爆發）先有
+  if (!time && !mul) return base;
+  const c = state.burstCache;
+  if (c && c.base === base) return c.out;
+  state.burstCache = { base, out: { ...base, time: base.time + time, mul: Math.round((base.mul + mul) * 100) / 100 } };
+  return state.burstCache.out;
+}
 
 /**
  * 隊員跟跑同出手。每個隊員每秒輸出 = 隊長而家戰力 ÷ 4 × share，平均分落每一下；子彈／刀氣係真嘅（同隊長嘅子彈行同一套命中規則：
@@ -115,12 +132,72 @@ function stepTeam(s, dt, rate) {
     const c = m.cfg, sl = T.slots[c.slot];
     m.x += (s.x + sl[0] - m.x) * (1 - Math.exp(-T.follow * m.lag * dt)); m.d = sl[1];
     m.fireT = Math.max(0, m.fireT - dt);
-    if (!(s.power > 0) || (m.cd -= dt * rate) > 0) continue;
-    m.cd += c.interval; m.shot++; m.fireT = 0.5;
-    const dmg = Math.max(1, Math.floor(s.power / 4 * c.share * c.interval)), x = m.x + (c.alt ? (m.shot % 2 ? c.alt : -c.alt) : 0);
+    if (!(s.power > 0)) continue;
+    // 無人機（燈）：自己隔一陣補一發細光彈
+    if (c.drone && (m.dcd -= dt * rate) <= 0) {
+      m.dcd += c.drone.interval;
+      const x = m.x + c.drone.side, d0 = m.d + F.startD, tx = aim ? clamp(x, aim.x - aimW, aim.x + aimW) : x;
+      s.bullets.push({ x, d: d0, form: s.form, fresh: true, mate: m.id, mk: `${m.id}:drone`, half: 0, pierce: 1, chain: 0, dmg: Math.max(1, Math.floor(s.power / 4 * c.drone.share * c.drone.interval)), near: 0, vx: aim && aim.d - d0 < c.drone.range ? (tx - x) * c.drone.speed / Math.max(0.6, aim.d - d0) : 0, speed: c.drone.speed, range: m.d + c.drone.range, homing: 0, off: 0 });
+      if (s.events.length < 60) s.events.push({ type: 'droneFire', id: m.id });
+    }
+    if ((m.cd -= dt * rate) > 0) continue;
+    const n = c.burst ?? 1, dmg = Math.max(1, Math.floor(s.power / 4 * c.share * c.interval / n));
+    if (c.kind === 'lob') {
+      // 榴彈：要有目標先射（冇就留住）。向隊長面前最近嗰個目標拋過去，落地範圍爆炸
+      if (!aim || aim.d > c.range) { m.cd = 0; continue; }
+      m.cd += c.interval; m.shot++; m.fireT = 0.5;
+      s.shells.push({ mate: m.id, x: m.x, d: m.d + 0.3, x0: m.x, d0: m.d + 0.3, t: 0, T: c.blast.time, ent: aim, ox: clamp(m.x - aim.x, -aimW, aimW) * 0.4, od: aim.type === 'phalanx' ? 0.25 : 0, dmg, form: s.form });
+      if (s.events.length < 60) s.events.push({ type: 'mateFire', id: m.id });
+      continue;
+    }
+    m.shot++; m.fireT = 0.5;
+    m.cd += n > 1 ? (m.shot % n ? c.burstGap : c.interval - c.burstGap * (n - 1)) : c.interval; // 點射：一輪 n 下，輪入面相隔 burstGap
+    const x = m.x + (c.alt ? (m.shot % 2 ? c.alt : -c.alt) : 0);
     const d0 = m.d + F.startD, tx = aim ? clamp(x, aim.x - aimW, aim.x + aimW) : x, vx = aim && aim.d - d0 < c.range ? (tx - x) * c.speed / Math.max(0.6, aim.d - d0) : 0;
     s.bullets.push({ x, d: d0, form: s.form, fresh: true, mate: m.id, half: c.half, pierce: c.pierce, chain: 0, dmg, near: c.near, vx, speed: c.speed, range: m.d + c.range, homing: 0, off: 0 });
     if (s.events.length < 60) s.events.push({ type: 'mateFire', id: m.id });
+  }
+  stepShells(s, dt);
+  // 光盾：擋完之後等 every 秒再撐起
+  const g = s.guard;
+  if (g) {
+    g.flash = Math.max(0, g.flash - dt);
+    if (g.t > 0) g.t = Math.max(0, g.t - dt);
+    else if (!g.up && (g.cd -= dt) <= 0) { g.up = true; s.events.push({ type: 'shieldUp' }); fx(s, 'ring', s.x, 0.7, 0.4, { color: '90,150,255', size: 1.1 }, true); }
+  }
+}
+
+/** 榴彈飛行同落地爆炸。目標仲喺度就跟住佢（目標向主角行緊），唔喺度就落喺原本瞄嗰點。 */
+function stepShells(s, dt) {
+  if (!s.shells.length) return;
+  let kept = 0;
+  for (const sh of s.shells) {
+    sh.t += dt;
+    const e = sh.ent, alive = e && !e.dead && s.ents.includes(e), front = alive && e.type === 'phalanx' ? phalanxFront(e) : 0;
+    if (alive) { sh.tx = e.x + sh.ox; sh.td = Math.max(0.6, e.d + front + sh.od); }
+    else if (sh.td !== undefined) sh.td -= COLUMN.world.scroll * dt; // 目標冇咗：個落點照樣跟住路面向後退
+    const k = Math.min(1, sh.t / sh.T);
+    sh.x = sh.x0 + ((sh.tx ?? sh.x0) - sh.x0) * k; sh.d = sh.d0 + ((sh.td ?? sh.d0 + 3) - sh.d0) * k; sh.k = k;
+    if (k < 1) { s.shells[kept++] = sh; continue; }
+    explode(s, sh);
+  }
+  s.shells.length = kept;
+}
+/** 方陣最前嗰隻離方陣起點幾遠。 */
+function phalanxFront(e) { let f = Infinity; for (let c = 0; c < e.cols; c++) if (e.front[c] < e.rows) f = Math.min(f, e.front[c]); return f === Infinity ? 0 : f * COLUMN.phalanx.gapD; }
+/** 榴彈爆炸：落點附近嘅方陣，冚到嘅每一行由最前數起倒 rows 隻；路障、首領食一發嘅威力。 */
+function explode(s, sh) {
+  const B = (s.team.mates.find((m) => m.id === sh.mate)?.cfg ?? rosterOf(sh.mate).battle).blast, reach = 0.9;
+  fx(s, 'ring', sh.x, sh.d, 0.45, { color: '255,120,190', size: B.half * 5 }, true);
+  fx(s, 'puff', sh.x, sh.d, 0.4, { color: '255,200,120', size: B.half * 1.6 }, true);
+  s.shake = Math.max(s.shake, 0.12);
+  s.events.push({ type: 'blast', id: sh.mate });
+  for (const e of s.ents) {
+    if (e.dead) continue;
+    if (e.type === 'phalanx') {
+      const fd = e.d + phalanxFront(e), wide = Math.abs(phalanxColX(e.cols, e.cols - 1)) + COLUMN.phalanx.r;
+      if (e.left > 0 && Math.abs(fd - sh.d) < reach && Math.abs(e.x - sh.x) < wide + B.half) hit(s, e, { x: clamp(sh.x, e.x - wide, e.x + wide), form: sh.form, mate: sh.mate, half: B.half, pierce: B.rows, chain: 0, dmg: sh.dmg, near: 0 }, fd);
+    } else if ((e.type === 'barrier' || e.type === 'boss') && Math.abs(e.d - sh.d) < reach && Math.abs(e.x - sh.x) < 0.45) hit(s, e, { x: sh.x, form: sh.form, mate: sh.mate, half: B.half, pierce: 1, chain: 0, dmg: sh.dmg, near: 0 }, e.d);
   }
 }
 
@@ -172,6 +249,8 @@ function spawnLane(state, item, lane, d, at) {
       // 精英：每隻要中 tough 下先倒（wear = 每行最前嗰隻已經中咗幾多下），賞金係普通嘅 bounty 倍
       tough: item.tough ?? 1, elite: !!item.elite, bounty: item.bounty ?? 1, wear: new Uint8Array(item.cols),
       alive: new Uint8Array(item.cols * item.rows).fill(1), front: new Int16Array(item.cols), left: item.cols * item.rows, total: item.cols * item.rows, ...hitState(),
+      // 遊走方陣：x0 = 中線，照 sway 左右擺；盾兵方陣：shield = 前面塊盾仲有幾多（打爆先傷到後面）
+      x0: x, sway: item.sway ?? null, shield: item.shield ?? 0, shieldMax: item.shield ?? 0,
     });
   }
 }
@@ -185,6 +264,9 @@ function spawn(state, item) {
   } else if (item.type === 'hazard') {
     // 危險地帶：一條線上面一段紅色地面（由 d 到 d + len），主角企喺上面每秒扣當時戰力嘅 rate
     state.ents.push({ type: 'hazard', lane: item.lane, x: laneX(item.lane), d, len: item.len, rate: item.rate, ...hitState() });
+  } else if (item.type === 'slow' || item.type === 'boost') {
+    // 減速帶／加速帶：一條線上面一段有色地面
+    state.ents.push({ type: item.type, lane: item.lane, x: laneX(item.lane), d, len: item.len, used: false, ...hitState() });
   } else if (item.type === 'miniboss') {
     // 中段小首領：同首領一樣係一個數字、自己行埋嚟；打低有大獎（戰力 × (1 + prize)），打唔低撞到就扣戰力，但唔會完場
     const far = d / COLUMN.world.scroll * (COLUMN.world.scroll + COLUMN.boss.speed);
@@ -368,6 +450,13 @@ function hit(state, e, b, d) {
     if (next.flipped) { g.flipT = CROWD.gate.flipTime; floatText(state, (x0 + x1) / 2, d + 0.25, CROWD_TEXT.flip, 'gain'); fx(state, 'ring', (x0 + x1) / 2, d, 0.5, { color: '70,235,170', size: 0.8 }, true); }
     return;
   }
+  if (e.type === 'phalanx' && e.shield > 0) {
+    // 盾兵：塊盾食晒呢一下（穿透都過唔到）；打爆先傷到後面
+    e.shield -= dmg;
+    fx(state, 'spark', b.x, d, 0.14, { color: '120,180,255', on: 'barrier' });
+    if (e.shield <= 0) { e.shield = 0; fx(state, 'ring', e.x, d, 0.45, { color: '120,180,255', size: 1 }, true); floatText(state, e.x, d + 0.3, COLUMN_TEXT.shieldDown, 'gain'); state.events.push({ type: 'barrierBroken', lane: e.lane }); chargeBurst(state, COLUMN.burst.wall / 2); }
+    return;
+  }
   if (e.type === 'phalanx') {
     const P = COLUMN.phalanx, main = phalanxColFor(e, b.x, half), pierce = b.pierce ?? 1;
     let bounty = 0;
@@ -439,6 +528,7 @@ function takeBrick(state, e, x, d) {
 }
 
 function win(state, boss) {
+  if (state.stage.endless) return nextWave(state, boss);
   boss.dead = true;
   fx(state, 'puff', boss.x, boss.d, 0.7, { color: '255,120,200', size: 0.5 }, true);
   fx(state, 'ring', boss.x, boss.d, 0.7, { color: '255,255,255', size: 2 }, true);
@@ -448,11 +538,32 @@ function win(state, boss) {
   state.events.push({ type: 'stageClear', stage: state.stageNo, power: state.power, form: state.form });
 }
 
+/** 無盡模式：打低一波嘅首領——即刻接下一波（照而家嘅實際戰力生成），唔完場。 */
+function nextWave(state, boss) {
+  boss.dead = true;
+  fx(state, 'puff', boss.x, boss.d, 0.7, { color: '255,120,200', size: 0.5 }, true);
+  fx(state, 'ring', boss.x, boss.d, 0.7, { color: '255,255,255', size: 2 }, true);
+  state.shake = 0.4; state.flash = 0.2;
+  state.wave++;
+  state.banner = { text: COLUMN_TEXT.wave(state.wave), t: 1.6, tone: 'gain' };
+  state.events.push({ type: 'waveClear', wave: state.wave - 1 });
+  state.stage = endlessWave(state.wave, Math.max(1, state.power), state.dist + 6);
+  state.next = 0; state.boss = null; state.bossSpawned = false; state.phase = 'run';
+  state.repel = { guard: false, burst: false };
+}
+
 // ---------- 碰撞 ----------
 
 function loseTo(state, n, x, d) {
   const loss = Math.min(n, state.power);
-  if (loss <= 0) return;
+  if (loss <= 0) return 0;
+  // 光盾（楯）：撐緊就擋走呢一次，之後 window 秒內嘅損失都唔計（一拃敵人撞埋嚟係好多下細損失，要成拃擋晒先似「擋下一次」）
+  const g = state.guard;
+  if (g && (g.up || g.t > 0)) {
+    if (g.up) { g.up = false; g.t = g.cfg.window; g.cd = g.cfg.every; g.n++; g.flash = 0.5; state.events.push({ type: 'shieldBlock' }); floatText(state, state.x, 0.7, COLUMN_TEXT.guarded, 'gain'); fx(state, 'ring', state.x, 0.6, 0.5, { color: '120,180,255', size: 1.6 }, true); state.flash = Math.max(state.flash, 0.08); }
+    g.saved += loss;
+    return 0;
+  }
   state.lost += loss;
   state.hurt = CROWD.feel.hurt.time;
   state.events.push({ type: 'hurt', loss });
@@ -478,7 +589,7 @@ function bossMoves(state, dt) {
     if (b.atk.t <= 0) {
       if (laneAt(state.x) === b.atk.lane) {
         const take = Math.min(Math.floor(state.power * b.slam.loss), state.power - 1);
-        if (take > 0) { loseTo(state, take); floatText(state, state.x, 0.5, `−${formatNumber(take)}`, 'loss'); }
+        if (take > 0 && loseTo(state, take)) floatText(state, state.x, 0.5, `−${formatNumber(take)}`, 'loss');
         state.shake = Math.max(state.shake, 0.4);
       }
       fx(state, 'ring', laneX(b.atk.lane), 0.2, 0.4, { color: '255,80,90', size: 1.2 }, true);
@@ -529,7 +640,7 @@ function contacts(state, dt = 0) {
             e.bitten += want;
             const loss = loseTo(state, want);
             state.shake = Math.max(state.shake, 0.15);
-            if (state.t - e.ft > 0.15) { e.ft = state.t; floatText(state, state.x, 0.45, `−${formatNumber(loss)}`, 'loss'); }
+            if (loss && state.t - e.ft > 0.15) { e.ft = state.t; floatText(state, state.x, 0.45, `−${formatNumber(loss)}`, 'loss'); }
           }
           fx(state, 'puff', state.x, 0.05, 0.3, { color: P.color, size: 0.07 });
         }
@@ -549,25 +660,35 @@ function contacts(state, dt = 0) {
         const loss = loseTo(state, hits * bite);
         state.shake = Math.max(state.shake, 0.15);
         fx(state, 'puff', state.x, 0.05, 0.3, { color: P.color, size: 0.07 });
-        if (state.t - e.ft > 0.15) { e.ft = state.t; floatText(state, state.x, 0.45, `−${formatNumber(loss)}`, 'loss'); }
+        if (loss && state.t - e.ft > 0.15) { e.ft = state.t; floatText(state, state.x, 0.45, `−${formatNumber(loss)}`, 'loss'); }
       }
     } else if (e.type === 'hazard') {
       // 危險地帶：主角喺呢條線、而且嗰段地面啱啱喺腳下 → 每秒扣當時戰力嘅 rate（最少留返 1）
       if (e.d > 0.05 || e.d + e.len < -0.05 || Math.abs(state.x - e.x) > 0.3) continue;
       e.acc = (e.acc ?? 0) + state.power * e.rate * dt;
       const take = Math.min(Math.floor(e.acc), state.power - 1);
-      if (take > 0) { e.acc -= take; loseTo(state, take); if (state.t - e.ft > 0.25) { e.ft = state.t; floatText(state, state.x, 0.45, `−${formatNumber(take)}`, 'loss'); } }
+      if (take > 0) { e.acc -= take; if (loseTo(state, take) && state.t - e.ft > 0.25) { e.ft = state.t; floatText(state, state.x, 0.45, `−${formatNumber(take)}`, 'loss'); } }
+    } else if (e.type === 'slow' || e.type === 'boost') {
+      if (e.d > 0.05 || e.d + e.len < -0.05 || Math.abs(state.x - e.x) > 0.3) continue;
+      if (e.type === 'slow') { if (!(state.mud > 0)) state.events.push({ type: 'slowIn' }); state.mud = 0.2; }
+      else if (!e.used) { e.used = true; state.rapid = MECH.boost.time; state.events.push({ type: 'boostIn' }); floatText(state, state.x, 0.6, COLUMN_TEXT.boost, 'gain'); fx(state, 'ring', state.x, 0, 0.45, { color: '255,214,102', size: 1.1 }, true); }
     } else if (e.type === 'boss' && e.mini) {
       if (e.d > COLUMN.boss.contactD) continue;
       // 小首領打唔低就撞到：扣剩低個數（最多扣三成戰力），佢就走咗
       const take = Math.min(Math.ceil(e.hp), Math.floor(state.power * 0.3));
-      if (take > 0) { loseTo(state, take); floatText(state, state.x, 0.5, `−${formatNumber(take)}`, 'loss'); }
-      state.shake = Math.max(state.shake, 0.3); state.hurt = CROWD.feel.hurt.time;
+      if (take > 0 && loseTo(state, take)) { floatText(state, state.x, 0.5, `−${formatNumber(take)}`, 'loss'); state.hurt = CROWD.feel.hurt.time; }
+      state.shake = Math.max(state.shake, 0.3);
       e.dead = true;
     } else if (e.type === 'boss') {
       if (e.d > COLUMN.boss.contactD) continue;
       // 數字比拼：主角扣走首領剩低個數；仲有戰力就贏
       const left = Math.ceil(e.hp), after = bossClash(state.power, left);
+      // 翻盤：輸梗嗰陣，撐緊嘅光盾可以頂住首領一次；爆發槽滿咗（留住未用）會自動放出嚟頂一次——首領彈返後，爭取多幾秒火力
+      if (!(after > 0) && (COLUMN.numbers.campaign || COLUMN.numbers.endless)) { // 只限主線同無盡（舊嘅比較用數值唔郁）
+        const g = state.guard, R = state.repel;
+        if (g && g.up && !R.guard) { R.guard = true; g.up = false; g.cd = g.cfg.every; g.n++; g.flash = 0.5; e.d += COLUMN.boss.repel; state.events.push({ type: 'shieldBlock' }); floatText(state, state.x, 0.8, COLUMN_TEXT.repelGuard, 'gain'); fx(state, 'ring', state.x, 0.6, 0.5, { color: '120,180,255', size: 1.8 }, true); state.shake = Math.max(state.shake, 0.3); continue; }
+        if (!R.burst && burstReady(state)) { R.burst = true; triggerBurst(state); e.d += COLUMN.boss.repel; floatText(state, state.x, 0.8, COLUMN_TEXT.repelBurst, 'gain'); fx(state, 'ring', state.x, 0.6, 0.5, { color: '255,214,102', size: 1.8 }, true); state.shake = Math.max(state.shake, 0.3); continue; }
+      }
       floatText(state, state.x, 0.5, `−${formatNumber(Math.min(left, state.power))}`, 'loss');
       state.shake = Math.max(state.shake, 0.45); state.hurt = CROWD.feel.hurt.time;
       state.lost += state.power - after;
@@ -630,6 +751,8 @@ export function updateColumn(state, dt) {
   setTarget(s, s.targetX + s.keyDir * C.keySpeed * dt);
   const before = s.x, want = (s.targetX - s.x) * (1 - Math.exp(-C.follow * dt));
   s.x += clamp(want, -C.maxSpeed * dt, C.maxSpeed * dt);
+  // 引導停住個世界（state.freeze，見 meta/tutorial.js）：隊長照樣跟手指左右移，其餘嘢（捲動、敵人、開火、碰撞）全部唔行
+  if (s.freeze) { s.vx = (s.x - before) / dt; [s.lean, s.leanV] = stepLean(s.lean, s.leanV, s.vx, dt); s.units[0].x = s.x; return; }
 
   // 世界向主角捲；方陣同首領自己再逼近，方陣近咗仲會橫向追住主角
   const v = W.scroll;
@@ -646,7 +769,8 @@ export function updateColumn(state, dt) {
     if (e.pop > 0) e.pop -= dt;
     if (e.type === 'phalanx') {
       e.d -= P.speed * dt;
-      if (e.d < P.chargeD) e.x += clamp(s.x - e.x, -P.drift * dt, P.drift * dt);
+      if (e.sway) e.x = e.x0 + Math.sin(s.t * e.sway.speed + e.sway.phase) * e.sway.amp; // 遊走方陣：左右擺，唔追主角
+      else if (e.d < P.chargeD) e.x += clamp(s.x - e.x, -P.drift * dt, P.drift * dt);
     } else if (e.type === 'boss') e.d -= COLUMN.boss.speed * dt;
     else if (e.type === 'gates') for (const g of e.gates) { g.hit = Math.max(0, g.hit - dt); g.pop = Math.max(0, g.pop - dt); g.flipT = Math.max(0, g.flipT - dt); }
   }
@@ -674,7 +798,9 @@ export function updateColumn(state, dt) {
     }
     if (s.weaponUp && (s.weaponUp.t -= dt) <= 0) s.weaponUp = null;
   }
-  const rate = bu.t > 0 ? burstCfg(s).mul : 1; // 爆發期間全隊射速加倍（完整爆發 2.5 倍）
+  if (s.mud > 0) s.mud = Math.max(0, s.mud - dt);
+  if (s.rapid > 0) s.rapid = Math.max(0, s.rapid - dt);
+  const rate = (bu.t > 0 ? burstCfg(s).mul : 1) * (s.mud > 0 ? MECH.slow.rate : 1) * (s.rapid > 0 ? MECH.boost.rate : 1); // 爆發期間全隊射速加倍（完整爆發 2.5 倍）；減速帶、加速帶再乘
   if (s.cd <= 0) s.cd += fire(s) / rate;
   if (s.team.mates.length) stepTeam(s, dt, rate);
   stepBullets(s, dt);
@@ -693,7 +819,7 @@ export function updateColumn(state, dt) {
 
 /** 成樣嘢（連最尾嗰塊、最尾嗰排）都過咗畫面底：清走。 */
 function gone(e) {
-  const tail = e.type === 'bricks' ? (e.n - 1) * e.gap : e.type === 'phalanx' ? (e.rows - 1) * COLUMN.phalanx.gapD : e.type === 'hazard' ? e.len : 0;
+  const tail = e.type === 'bricks' ? (e.n - 1) * e.gap : e.type === 'phalanx' ? (e.rows - 1) * COLUMN.phalanx.gapD : e.type === 'hazard' || e.type === 'slow' || e.type === 'boost' ? e.len : 0;
   if (e.type === 'bricks' && e.head >= e.n) return true;
   if (e.type === 'phalanx' && e.left <= 0) return true;
   return e.d + tail < COLUMN.world.despawn;

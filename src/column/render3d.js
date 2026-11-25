@@ -26,7 +26,7 @@ import { formatNumber } from '../core/format.js';
 import { BAD, GOOD, drawCount, drawCutin, drawFx, drawHud } from '../crowd/render.js';
 import { formOf, gateLabel, gateSegment, isGoodGate } from '../crowd/rules.js';
 import { BULLET_3D, bullet3d } from '../data/bullet3d.js';
-import { COLUMN, COLUMN_TEXT } from '../data/column.js';
+import { burstOf, COLUMN, COLUMN_TEXT } from '../data/column.js';
 import { unitCutinKey } from '../data/assets.js';
 import { CHAIN_STAGES, ROSTER, rosterOf } from '../data/characters.js';
 import { CROWD } from '../data/crowd.js';
@@ -385,6 +385,28 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
       // 手槍（鈴）：方身滑套、向下嘅握把、槍身兩邊同頂上各一條橙色發光條
       box(0.24, 0.3, 0.12, 1, body); box(0.2, 0.62, 0, 0.3, dark, -0.36);
       box(0.27, 0.07, 0.45, 0.95, glow, 0.02); box(0.08, 0.33, 0.45, 0.95, glow); cyl(0.07, 0.07, 0.96, 1, glow, 8);
+    } else if (d.shape === 'smg') {
+      // 衝鋒槍（楯）：方身機匣、後面一截短托、向下嘅握把同彈匣、幼槍管，兩邊同頂上一條鈷藍光
+      box(0.2, 0.26, 0.12, 0.8, body); box(0.14, 0.16, 0, 0.14, dark, 0.02); box(0.16, 0.46, 0.2, 0.36, dark, -0.3); box(0.13, 0.52, 0.46, 0.6, dark, -0.34);
+      cyl(0.05, 0.05, 0.8, 1, dark, 8); box(0.23, 0.06, 0.42, 0.78, glow, 0.03); box(0.07, 0.29, 0.42, 0.78, glow); cyl(0.058, 0.058, 0.97, 1, glow, 8);
+    } else if (d.shape === 'shield') {
+      // 大盾（楯）：一塊企直嘅長方形厚板（闊 0.62、高 1，單位 = 長度），面向前；四邊同中間一條直線鈷藍發光。原點 = 左手揸嘅位（板後面、偏上）
+      box(0.62, 1, 0.04, 0.1, body, -0.12); box(0.5, 0.86, 0.1, 0.13, dark, -0.12);
+      for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.035 * u, 1.02 * u, 0.09 * u), glow, -0.12 * u, 0.075 * u, sx * 0.31 * u);
+      for (const sy of [-1, 1]) add(new THREE.BoxGeometry(0.64 * u, 0.035 * u, 0.09 * u), glow, (-0.12 + sy * 0.5) * u, 0.075 * u);
+      add(new THREE.BoxGeometry(0.05 * u, 0.7 * u, 0.02 * u), glow, -0.12 * u, 0.135 * u); add(new THREE.BoxGeometry(0.05 * u, 0.7 * u, 0.02 * u), glow, -0.12 * u, 0.035 * u);
+    } else if (d.shape === 'launcher') {
+      // 榴彈炮（燈）：一條粗圓筒擔喺膊頭，前後各一個桃紅光環，筒口闊少少，上面一個瞄準鏡
+      cyl(0.1, 0.1, 0, 0.9, dark, 12); cyl(0.115, 0.115, 0.06, 0.14, glow, 12); cyl(0.115, 0.115, 0.62, 0.7, glow, 12);
+      cyl(0.11, 0.135, 0.86, 1, body, 12); cyl(0.12, 0.12, 0.985, 1, glow, 12); box(0.2, 0.12, 0.2, 0.56, body, 0.02);
+      box(0.07, 0.07, 0.3, 0.52, dark, 0.15); box(0.08, 0.3, 0.38, 0.46, dark, -0.2);
+    } else if (d.shape === 'drone') {
+      // 浮游無人機（燈）：一粒白色圓球，前面一隻青色單眼，頂上一條細天線，兩邊細翼
+      add(new THREE.SphereGeometry(0.5 * u, 14, 10), body, 0, 0.5 * u);
+      add(new THREE.SphereGeometry(0.2 * u, 10, 8), glow, 0.04 * u, 0.93 * u); add(new THREE.TorusGeometry(0.27 * u, 0.045 * u, 6, 16), dark, 0.04 * u, 0.9 * u);
+      add(new THREE.SphereGeometry(0.16 * u, 8, 6), glow, -0.02 * u, 0.06 * u);
+      add(new THREE.CylinderGeometry(0.02 * u, 0.02 * u, 0.4 * u, 5), dark, 0.62 * u, 0.5 * u);
+      for (const sx of [-1, 1]) add(new THREE.BoxGeometry(0.3 * u, 0.05 * u, 0.3 * u), dark, 0, 0.5 * u, sx * 0.6 * u);
     } else if (d.shape === 'katana') {
       // 直刀（霧）：深色刀柄、細護手、窄身直刃（刃口向上）、刀背一條青綠色光
       cyl(0.02, 0.02, 0, 0.23, dark, 6); box(0.085, 0.03, 0.23, 0.25, dark);
@@ -458,7 +480,10 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
    * （靴上面嘅青綠色裝飾貼住條腿，唔計）——將佢哋跟腿嗰份權重大部分改為跟髖骨（留 keep 成跟腿，衫腳仲會輕微擺動）。
    * 成件衫腳就好似一塊由腰垂落嚟嘅硬布，唔會再左右扯開。回傳改咗幾多個頂點。
    */
+  /** 貼圖顏色啱唔啱設定入面嘅 tint 條件（data/lead3d.js）：min = [色頻, 最少]；over = [[甲, 乙, 倍數]…] 全部「甲 > 乙 × 倍數」。 */
+  const tintOk = (tint, r, g, b) => { const c = { r, g, b }; return c[tint.min[0]] > tint.min[1] && tint.over.every(([p, q, k]) => c[p] > c[q] * k); };
   function fixCoat(mesh, opt, root) {
+    if (!opt.tint) return 0;
     const geo = mesh.geometry, pos = geo.attributes.position, uv = geo.attributes.uv, si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight, bones = mesh.skeleton.bones;
     const img = mesh.material.map?.image, hips = bones.findIndex((b) => /Hips$/.test(b.name));
     if (!img || !uv || hips < 0 || !globalThis.document) return 0;
@@ -479,9 +504,9 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
       let legW = 0; for (let k = 0; k < 4; k++) if (leg[si.getComponent(i, k)]) legW += sw.getComponent(i, k);
       if (legW <= 0.02) continue;
       v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
-      if (v.y > yMax) continue;
+      if (v.y > yMax || (opt.low && v.y < hipP.y - opt.low * H)) continue; // low：髖以下幾多（× 身高）之外唔理（靴同靴上面嘅裝飾）
       const o = (Math.min(N - 1, Math.max(0, Math.floor(uv.getY(i) * N))) * N + Math.min(N - 1, Math.max(0, Math.floor(uv.getX(i) * N)))) * 4, r = px[o], g = px[o + 1], b = px[o + 2];
-      if (!(g > 26 && g > r * 1.22 && g >= b * 0.85) || dist(v) < far) continue;   // 唔夠綠 = 褲／靴；貼住條腿 = 靴上面嘅裝飾
+      if (!tintOk(opt.tint, r, g, b) || dist(v) < far) continue;   // 顏色唔啱（霧：唔夠綠）= 褲／靴；貼住條腿 = 靴上面嘅裝飾
       let slot = -1, moved = 0, minW = Infinity, minK = -1;
       for (let k = 0; k < 4; k++) {
         const bi = si.getComponent(i, k), w = sw.getComponent(i, k);
@@ -490,6 +515,53 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
       }
       if (slot >= 0) sw.setComponent(i, slot, sw.getComponent(i, slot) + moved);
       else { si.setComponent(i, minK, hips); sw.setComponent(i, minK, moved + minW); } // 冇髖骨嗰格：借最細嗰格腿骨（嗰少少權重一齊畀髖）
+      fixed++;
+    }
+    if (fixed) { sw.needsUpdate = true; si.needsUpdate = true; }
+    return fixed;
+  }
+
+  /**
+   * 長雙馬尾修正（燈）：自動綁骨將垂落背後嘅馬尾部分綁咗去手臂同腿，手一舉（擔炮）、腳一跑，馬尾就畀扯到一條條尖刺噉。
+   * 做法：搵出「屬於頭髮」嘅頂點——貼圖顏色係桃紅（頭髮；外套係白同紫、褲係黑），而且離手臂骨有返咁上下距離（袖口嘅桃紅邊貼住條手，唔計）——
+   * 將佢哋跟手臂、跟腿嗰份權重大部分改為跟身（髖以上跟上胸 Spine2，以下跟髖骨；留 keep 成，仲會輕微擺動）。回傳改咗幾多個頂點。
+   */
+  function fixHair(mesh, opt, root) {
+    if (!opt.tint) return 0;
+    const geo = mesh.geometry, pos = geo.attributes.position, uv = geo.attributes.uv, si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight, bones = mesh.skeleton.bones;
+    const img = mesh.material.map?.image, hips = bones.findIndex((b) => /Hips$/.test(b.name)), chest = bones.findIndex((b) => /Spine2$/.test(b.name));
+    if (!img || !uv || hips < 0 || chest < 0 || !globalThis.document) return 0;
+    const N = 256, cv = globalThis.document.createElement('canvas'); cv.width = cv.height = N;
+    const c2 = cv.getContext('2d', { willReadFrequently: true });
+    let px; try { c2.drawImage(img, 0, 0, N, N); px = c2.getImageData(0, 0, N, N).data; } catch { return 0; }
+    root.updateMatrixWorld(true);
+    const limb = bones.map((b) => /(Shoulder|Arm|ForeArm|Hand\w*|UpLeg|Leg|Foot|ToeBase|Toe_End)$/.test(b.name)), at = (re) => { const b = bones.find((o) => re.test(o.name)); return b ? new THREE.Vector3().setFromMatrixPosition(b.matrixWorld) : null; };
+    const hipP = at(/Hips$/), segs = [];
+    for (const side of ['Left', 'Right']) { const a = at(new RegExp(`${side}Arm$`)), b = at(new RegExp(`${side}ForeArm$`)), c = at(new RegExp(`${side}Hand$`)); if (a && b && c) segs.push([a, b], [b, c]); }
+    for (const side of ['Left', 'Right']) { const a = at(new RegExp(`${side}UpLeg$`)), b = at(new RegExp(`${side}Leg$`)), c = at(new RegExp(`${side}Foot$`)); if (a && b && c) segs.push([a, b], [b, c]); } // 腿上面嘅桃紅花紋貼住條腿，一樣唔計
+    if (!hipP || !segs.length) return 0;
+    let top = -Infinity, low = Infinity; const v = new THREE.Vector3(), q = new THREE.Vector3(), ab = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i += 7) { v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld); if (v.y > top) top = v.y; if (v.y < low) low = v.y; }
+    const H = top - low, far = (opt.off ?? 0.045) * H;
+    const dist = (p) => { let best = Infinity; for (const [a, b] of segs) { ab.subVectors(b, a); const t = clamp(q.subVectors(p, a).dot(ab) / ab.lengthSq(), 0, 1), d = q.copy(a).addScaledVector(ab, t).distanceTo(p); if (d < best) best = d; } return best; };
+    let fixed = 0;
+    for (let i = 0; i < pos.count; i++) {
+      let limbW = 0; for (let k = 0; k < 4; k++) if (limb[si.getComponent(i, k)]) limbW += sw.getComponent(i, k);
+      if (limbW <= 0.02) continue;
+      const o = (Math.min(N - 1, Math.max(0, Math.floor(uv.getY(i) * N))) * N + Math.min(N - 1, Math.max(0, Math.floor(uv.getX(i) * N)))) * 4, r = px[o], g = px[o + 1], b = px[o + 2];
+      if (!tintOk(opt.tint, r, g, b)) continue;   // 顏色唔啱（燈：唔係桃紅）= 唔係頭髮
+      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      if (dist(v) < far * (v.y < hipP.y ? opt.leg ?? 1.5 : 1)) continue;                      // 貼住條手／腿 = 袖口嘅邊、襪上面嘅花紋
+      if (opt.low && v.y < hipP.y - opt.low * H) continue; // 太低：係靴唔係頭髮
+      const to = v.y >= hipP.y ? chest : hips;
+      let slot = -1, moved = 0, minW = Infinity, minK = -1;
+      for (let k = 0; k < 4; k++) {
+        const bi = si.getComponent(i, k), w = sw.getComponent(i, k);
+        if (bi === to && w > 0) slot = k;
+        if (limb[bi]) { const keep = w * opt.keep; moved += w - keep; sw.setComponent(i, k, keep); if (keep < minW) { minW = keep; minK = k; } }
+      }
+      if (slot >= 0) sw.setComponent(i, slot, sw.getComponent(i, slot) + moved);
+      else { si.setComponent(i, minK, to); sw.setComponent(i, minK, moved + minW); }
       fixed++;
     }
     if (fixed) { sw.needsUpdate = true; si.needsUpdate = true; }
@@ -537,7 +609,7 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
       }
       return h;
     };
-    const coatFixed = cfg.coat && !opts.noCoat ? fixCoat(mesh, cfg.coat, g.scene) : 0; // ?coat=0：唔修正（對照用）
+    const coatFixed = opts.noCoat ? 0 : cfg.coat ? fixCoat(mesh, cfg.coat, g.scene) : cfg.hair ? fixHair(mesh, cfg.hair, g.scene) : 0; // ?coat=0：唔修正（對照用）；hair = 雙馬尾修正
     const hands = { r: side('Right', 0), l: side('Left', 1), chest: bone(/Spine2$/) };
     const made = run ? composeRun(run, arms, !own) : null, clip = made?.clip ?? null;
     const mixer = new THREE.AnimationMixer(g.scene);
@@ -614,7 +686,7 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
     const c = D.cfg, H = L.height, u = c.length * H, k = L.root.scale.x, around = c.around * Math.PI / 180;
     L.root.updateMatrixWorld(true);
     L.container.worldToLocal(VA.setFromMatrixPosition(L.hands.chest.matrixWorld));
-    VA.x -= c.hold[0] * H; VA.y += c.hold[1] * H; VA.z += c.hold[2] * H;   // 模型面向 +z，佢嘅右邊係 −x
+    VA.x -= c.hold[0] * H; VA.y += c.hold[1] * H + (c.bob ? Math.sin(globalThis.performance.now() / 1000 * 2.6) * c.bob * H : 0); VA.z += c.hold[2] * H;   // 模型面向 +z，佢嘅右邊係 −x；bob = 自己上下浮（無人機）
     const pitch = (c.pitch + D.pitchAdd) * Math.PI / 180, dir = VB.set(0, Math.sin(pitch), Math.cos(pitch)).normalize(); // pitchAdd：揮刀嗰下臨時加減
     D.grp.quaternion.setFromUnitVectors(FWD, dir);
     D.grp.position.copy(VA);
@@ -868,8 +940,14 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
     models.report.allMs = since();
   });
   // 隊員（040）：每個隊員自己嘅模型（data/lead3d.js 嘅 MATE_3D），同隊長行同一套載入、骨架、跑步、揸武器流程。用到先載入（未到就唔畫）。
-  const mateModels = {}, mateImgs = {}, MATE_PHASE = { suzu: [0.37, 1.07], kiri: [0.71, 0.96] };
-  const mateLooks = Object.fromEntries(ROSTER.filter((r) => r.battle).map((r) => [r.id, { ...r.battle.look, coreC: rgb(r.battle.look.core), glowC: rgb(r.battle.look.glow) }]));
+  const mateModels = {}, mateImgs = {}, MATE_PHASE = { suzu: [0.37, 1.07], kiri: [0.71, 0.96], tate: [0.15, 0.93], akari: [0.55, 1.1] };
+  const mateLooks = Object.fromEntries(ROSTER.filter((r) => r.battle).flatMap((r) => [[r.id, r.battle.look], ...(r.battle.drone ? [[`${r.id}:drone`, r.battle.drone.look]] : [])]).map(([k, look]) => [k, { ...look, coreC: rgb(look.core), glowC: rgb(look.glow) }]));
+  // 榴彈（燈）：最多同時 6 粒，一粒桃紅色發光球；光盾（楯）：隊伍前面一塊彎嘅藍色光幕
+  const shellMeshes = Array.from({ length: 6 }, () => { const g = new THREE.Group(), core = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffe6f2, fog: false })), halo = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff5aaa, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); g.add(core, halo); g.visible = false; g.frustumCulled = false; scene.add(g); return g; });
+  const guardGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true, Math.PI - 0.62, 1.24);
+  const guardWall = new THREE.Mesh(guardGeo, new THREE.MeshBasicMaterial({ color: 0x4a8cff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+  const guardEdge = new THREE.LineSegments(new THREE.EdgesGeometry(guardGeo), new THREE.LineBasicMaterial({ color: 0x9cc4ff, transparent: true, opacity: 0.9, fog: false }));
+  guardWall.add(guardEdge); guardWall.visible = false; guardWall.frustumCulled = false; guardEdge.frustumCulled = false; scene.add(guardWall);
   function mateModel(id) {
     if (!(id in mateModels)) {
       mateModels[id] = null;
@@ -983,7 +1061,7 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
     }
     if (L) {
       models.lead = L; L.warm = 0;
-      L.mixer.update(dt * 1.25);
+      if (!s.freeze) L.mixer.update(dt * 1.25); // 引導停住個世界：隊長停步（唔好原地跑）
       const k = size.lead / L.height;
       L.root.scale.setScalar(k);
       L.root.position.set(s.x, 0, 0);
@@ -1019,9 +1097,23 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
       // 揮刀：出刀氣嗰下由舉起揮到向前落，之後慢慢舉返起；出槍嗰隻手輕微後座
       const sw = Mt.cfg.swing, age = 0.5 - m.fireT;
       if (sw && Mt.devices[0]) Mt.devices[0].pitchAdd = m.fireT <= 0 ? 0 : age < sw.time ? (sw.to - sw.from) * (age / sw.time) : age < sw.time + sw.back ? (sw.to - sw.from) * (1 - (age - sw.time) / sw.back) : 0;
+      else if (Mt.cfg.recoil === 'first') { if (Mt.devices[0]) Mt.devices[0].pitchAdd = m.fireT > 0.42 ? 12 * (m.fireT - 0.42) / 0.08 : 0; } // 淨係第一件（槍／炮）有後座，盾同無人機唔郁
       else if (Mt.devices.length > 1) for (let n = 0; n < Mt.devices.length; n++) Mt.devices[n].pitchAdd = m.fireT > 0.42 && (m.shot + n) % 2 === 0 ? 14 * (m.fireT - 0.42) / 0.08 : 0;
       placeDevice(Mt);
       shadow(m.x, -m.d, size.lead * 0.5);
+    }
+    // 榴彈：拋物線（高度跟飛咗幾多成）；光盾：撐緊就喺隊伍前面，擋嗰下閃白放大
+    for (let n = 0; n < shellMeshes.length; n++) {
+      const sh = s.shells?.[n], g = shellMeshes[n];
+      g.visible = !!sh;
+      if (sh) { const k = sh.k ?? 0, ht = rosterOf(sh.mate)?.battle?.blast?.height ?? 0.9; g.position.set(sh.x, size.lead * (0.9 * (1 - k) + 0.15 * k) + Math.sin(Math.PI * k) * ht, -sh.d); g.scale.setScalar(1 + 0.25 * Math.sin(s.t * 30)); }
+    }
+    const gd = s.guard, gOn = !!gd && (gd.up || gd.flash > 0) && s.power > 0;
+    guardWall.visible = gOn;
+    if (gOn) {
+      const f = gd.flash > 0 ? gd.flash / 0.5 : 0, r = 0.95 * (1 + 0.25 * f);
+      guardWall.position.set(s.x, size.lead * 0.36, 0.3); guardWall.scale.set(r, size.lead * 0.72, r);
+      guardWall.material.opacity = gd.up ? 0.13 + 0.05 * Math.sin(s.t * 5) : 0.6 * f; guardWall.material.color.setHex(f > 0 ? 0xcfe2ff : 0x4a8cff); guardEdge.material.opacity = gd.up ? 0.85 : f;
     }
 
     // 場上嘅嘢
@@ -1075,7 +1167,18 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
         if (e.d > far || nGate >= V3.maxGates) continue;
         const d0 = Math.max(e.d, W3.despawn), d1 = Math.min(e.d + e.len, far);
         if (d1 > d0) setBox(gates, nGate++, e.x, 0.014, -(d0 + d1) / 2, 0.6, 0.02, d1 - d0, C.setRGB(1, 0.16 + 0.12 * Math.sin(s.t * 9), 0.2));
+      } else if (e.type === 'slow' || e.type === 'boost') {
+        // 減速帶：一段藍色地面（慢慢閃）；加速帶：一段金色地面（快閃，踩過就暗）
+        if (e.d > far || nGate >= V3.maxGates) continue;
+        const d0 = Math.max(e.d, W3.despawn), d1 = Math.min(e.d + e.len, far), k = e.type === 'slow' ? 0.5 + 0.2 * Math.sin(s.t * 3) : e.used ? 0.25 : 0.75 + 0.25 * Math.sin(s.t * 12);
+        if (d1 > d0) setBox(gates, nGate++, e.x, 0.014, -(d0 + d1) / 2, 0.6, 0.02, d1 - d0, e.type === 'slow' ? C.setRGB(0.2 * k, 0.5 * k, 1.1 * k) : C.setRGB(1.2 * k, 0.95 * k, 0.25 * k));
       } else if (e.type === 'phalanx' && enemies) {
+        // 盾兵方陣：最前面一塊藍色光盾（打爆先傷到後面）
+        if (e.shield > 0 && e.left > 0 && e.d < far && nGate < V3.maxGates) {
+          let fr = e.rows; for (let c = 0; c < e.cols; c++) if (e.front[c] < fr) fr = e.front[c];
+          const fd = e.d + fr * PH.gapD - 0.28, wide = Math.abs(phalanxColX(e.cols, e.cols - 1)) * 2 + 0.16, hot = e.hit > 0 ? 1.6 : 1;
+          if (fd > W3.despawn) setBox(gates, nGate++, e.x, 0.2, -fd, wide, 0.4, 0.035, C.setRGB(0.25 * hot, 0.55 * hot, 1.25 * hot));
+        }
         if (G.pad > 0 && e.left > 0 && nPad < V3.maxPads) { // 地墊：由最前仲有敵人嗰行鋪到最後一行（遠到睇唔到嗰段唔鋪）
           let front = e.rows;
           for (let c = 0; c < e.cols; c++) if (e.front[c] < front) front = e.front[c];
@@ -1148,7 +1251,7 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
     const hot = s.burst?.t > 0 ? 1.55 : 1, hotB = s.burst?.t > 0 ? 1.4 : 1; // 爆發期間：子彈、光束粗啲亮啲
     for (const b of s.bullets) {
       if (b.mate) { // 隊員嘅子彈／刀氣：由佢自己面前直飛，用佢自己嗰款彈種
-        const look = mateLooks[b.mate], core = look && bulletCore[look.shape];
+        const look = mateLooks[b.mk ?? b.mate], core = look && bulletCore[look.shape];
         if (!core || b.d > far + 2 || nBullet >= V3.maxBullets) continue;
         const y = up * 0.55, z = -(b.d - look.len / 2), wd = look.width * (look.shape === 'blade' ? 1 : hot);
         C.copy(look.coreC).lerp(look.glowC, look.mix).multiplyScalar(hotB);
@@ -1346,11 +1449,17 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
         const p = cam.project(e.x, Math.max(0.3, fd), 0.5), sz = clamp(18 * u * p.s * 1.3, 11 * u, 19 * u);
         ctx.globalAlpha = fade(fd);
         tag(String(e.left), p.x, p.y, sz, `rgb(${BAD})`);
+        if (e.shield > 0) tag(formatNumber(Math.ceil(e.shield)), p.x, p.y - sz * 1.5, sz, '#7fb4ff', COLUMN_TEXT.shieldTag);
       } else if (e.type === 'hazard') {
         if (e.d + e.len < 0.2 || e.d > far) continue;
         const p = cam.project(e.x, Math.max(e.d, 0.4), 0.05), sz = clamp(16 * u * p.s * 1.2, 10 * u, 17 * u);
         ctx.globalAlpha = fade(e.d);
         tag(COLUMN_TEXT.hazard, p.x, p.y, sz, COLORS.red);
+      } else if (e.type === 'slow' || (e.type === 'boost' && !e.used)) {
+        if (e.d + e.len < 0.2 || e.d > far) continue;
+        const p = cam.project(e.x, Math.max(e.d, 0.4), 0.05), sz = clamp(16 * u * p.s * 1.2, 10 * u, 17 * u);
+        ctx.globalAlpha = fade(e.d);
+        tag(e.type === 'slow' ? COLUMN_TEXT.slowZone : COLUMN_TEXT.boostZone, p.x, p.y, sz, e.type === 'slow' ? '#7fb4ff' : COLORS.gold);
       } else if (e.type === 'boss' && !done) {
         const p = cam.project(e.x, e.d, size.boss * Math.max(0.9, (SCENE_3D.boss.scale ?? 1) * 1.5) * (e.mini ? MINI : 1)), txt = formatNumber(Math.max(0, Math.ceil(e.hp)));
         const pop = 1 + (e.pop > 0 ? 0.2 * e.pop / 0.16 : 0), fs = Math.max(15 * u, 0.3 * H * 0.26 * p.s) * pop, y = Math.max(fs * 1.2 + 44 * u, p.y);
@@ -1383,7 +1492,7 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
     warmCutin();
     drawCutin(ctx, view, s, overlayAssets);
     // 爆發技：發動嗰刻插入隊長而家形態嘅特寫（同進化用同一條斜帶），帶上面寫技能名；之後成段爆發時間畫面邊有一圈金光，上面一條倒數
-    const bu = s.burst, BC = bu?.full ? COLUMN.burst.full : COLUMN.burst;
+    const bu = s.burst, BC = burstOf(bu);
     if (bu?.cut > 0) {
       // 單人：隊長一段。完整爆發：起、承、決三個人逐個出（每人一段），最後先係隊長
       const T = CROWD.evolution.showTime, all = 1 - bu.cut / BC.cutTime, order = bu.full && bu.order ? bu.order : [null], seg = Math.min(order.length - 1, Math.floor(all * order.length)), k = all * order.length - seg;
@@ -1398,7 +1507,7 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
         ctx.beginPath(); ctx.moveTo(0, y0 + bh * 0.1); ctx.lineTo(W, y0); ctx.lineTo(W, y0 + bh * 0.9); ctx.lineTo(0, y0 + bh); ctx.closePath();
         const g = ctx.createLinearGradient(0, y0, W, y0 + bh); g.addColorStop(0, 'rgba(14,18,32,.95)'); g.addColorStop(1, `rgba(${who.color},.45)`);
         ctx.fillStyle = 'rgba(14,18,32,.95)'; ctx.fill(); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = `rgb(${who.color})`; ctx.lineWidth = 2 * u; ctx.stroke(); ctx.clip();
-        if (im?.complete && im.naturalWidth) { const sh = im.naturalHeight * 0.3, sy = im.naturalHeight * 0.012, sc = Math.max(W * 0.62 / im.naturalWidth, bh / sh); ctx.drawImage(im, 0, sy, im.naturalWidth, sh, W * 0.62 - im.naturalWidth * sc / 2, y0, im.naturalWidth * sc, sh * sc); }
+        if (im?.complete && im.naturalWidth) { const sh = im.naturalHeight * (who.cutin?.[1] ?? 0.3), sy = im.naturalHeight * (who.cutin?.[0] ?? 0.012), sc = Math.max(W * 0.62 / im.naturalWidth, bh / sh); ctx.drawImage(im, 0, sy, im.naturalWidth, sh, W * 0.62 - im.naturalWidth * sc / 2, y0, im.naturalWidth * sc, sh * sc); }
         ctx.restore();
       }
       const label = bu.full ? `${CHAIN_STAGES[who.chain].label} · ${who.leader ? `完整爆發 ${who.burst.name}` : who.burst.name.replace(/^.* · /, '')}` : `爆發技 · ${who.burst.name}`, y = y0 + bh * 0.8;
@@ -1412,14 +1521,16 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
       const k = bu.t / BC.time, a = (bu.full ? 0.4 : 0.3) + 0.12 * Math.sin(s.t * 11), g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.56);
       g.addColorStop(0, 'rgba(255,214,102,0)'); g.addColorStop(1, `rgba(255,190,70,${a})`);
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      if (!opts.domHud) { // 爆發剩低幾耐：有網頁版戰鬥介面就由佢畫
       const bw = W * 0.5, bx = (W - bw) / 2, by = H * 0.118;
       ctx.fillStyle = 'rgba(14,18,32,.7)'; ctx.fillRect(bx, by, bw, 5 * u);
       ctx.fillStyle = k < 0.25 ? '#ff8a5a' : '#ffd24a'; ctx.fillRect(bx, by, bw * k, 5 * u);
       ctx.font = `italic 900 ${11 * u}px "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#ffd24a';
       ctx.fillText(`${bu.full ? '接力爆發' : '爆發中'} ×${BC.mul}`, W / 2, by - 2 * u);
+      }
     }
-    drawHud(ctx, view, s);
-    drawSalvoTag(ctx, view, s);
+    drawHud(ctx, view, s, !!opts.domHud);
+    if (!opts.domHud) drawSalvoTag(ctx, view, s);
     drawResult(ctx, view, s);
     if (opts.showFps) { // ?fps=1：左下角顯示即時更新率、最近 5 秒最慢嗰格、而家嘅像素比
       const m = meter.read(), txt = `${Math.round(m.fps)} fps · 最慢 ${m.worstMs.toFixed(0)} ms · ×${view.glRatio}`;
@@ -1452,6 +1563,8 @@ export function createColumnRenderer3D(canvas, assets, opts = {}) {
 
   return {
     draw, resize, view, takePerf, ready, allReady,
+    /** 第一批模型落咗幾多（載入畫面用）：done / total = 幾多個檔，fraction = 照大細計嘅 0 至 1 */
+    loadState: () => ({ done: firstFiles.filter((f) => progress.get(f).done).length, total: firstFiles.length, fraction: loadFraction() }),
     /** 近鏡睇主角（除錯 / 截圖用）：closeup({ yaw, pitch, dist, x, y, z })，dist 係身高嘅倍數，x/y/z = 望住邊（人物右邊、離地、向前；× 身高）；closeup(null) 返去正常鏡頭 */
     closeup: (o) => { close = o || null; },
     /** 模型面數同有冇減面；renderer = 上一格 WebGL 畫咗幾多個三角形、幾多次繪圖指令 */

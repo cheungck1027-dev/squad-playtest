@@ -7,6 +7,7 @@
 //   weapons   [開局武器級, 本關最高武器級]（1 起計）。一關只升 1–3 級
 //   形態唔寫喺表度：第 1–3 關形態 I 開局、4–6 關 II、7–9 關 III、第 10 關 IV；第 3、6、9 關升到第 4、7、10 級武器嗰陣進化（一關最多一次，見 stageForms）
 //   gain      收入倍數（磚、大獎、門、賞金一齊乘）：節數多嘅關收穫次數多，每次細啲，成關先至都係約 20–30 倍（實測調）
+//   rec       建議開局戰力係基數嘅幾多倍（校準時普通玩家過呢關嗰刻嘅開局倍數；關卡簡介用）
 //   ref       基準（有齊嗰關預計嘅隊員、識用爆發技）：冇升級時，自動試玩（「識揀」同「普通玩家」取幾何平均）喺呢關打得走幾大嘅首領，÷ 基數（實測；關卡內容一改就要重新量）
 //   hard      難度倍數：首領個數 = 基數 × ref × hard。細過 1 = 冇升級都過到；大過 1 = 要靠升級
 //   intro     地圖簡介
@@ -17,7 +18,7 @@ import { COLUMN, niceNumber, paceCurve } from './column.js';
 import { WEAPONS } from './weapons.js';
 import { MAX_MATES, ROSTER } from './characters.js';
 
-export const STAGE_COUNT = 10;
+export const STAGE_COUNT = 20;
 
 /** 新嘢：邊一關開始有、叫乜名、一句說明（地圖簡介同報告用）。 */
 export const FEATURES = {
@@ -28,19 +29,45 @@ export const FEATURES = {
   hazard: { from: 6, name: '危險地帶', note: '紅色地面會持續扣戰力，見到就避開嗰條線。' },
   slam: { from: 7, name: '首領出招', note: '首領會預告之後砸向一條線，紅光一閃就要走開。' },
   twoPhase: { from: 10, name: '兩階段大首領', note: '打到一半會發狂，出招快一倍。' },
+  // 後十關（041 第四部分）：兩種新敵人行為、兩種新路面機關
+  sway: { from: 11, name: '遊走方陣', note: '成塊方陣左右遊走，要跟住佢移動先射得中。' },
+  slow: { from: 12, name: '減速帶', note: '藍色地面：企喺上面全隊射速減半，快啲行過。' },
+  shield: { from: 13, name: '盾兵方陣', note: '方陣前面有一塊藍色盾，要先打爆塊盾先傷到後面嘅敵人。' },
+  boost: { from: 14, name: '加速帶', note: '金色地面：踩過之後幾秒內全隊射速加快，值得轉線去踩。' },
 };
 
+/** 路面機關同新敵人嘅數值。 */
+export const MECH = {
+  slow: { rate: 0.5, len: 3.2 },                 // 減速帶：企喺上面射速 × rate
+  boost: { rate: 1.6, time: 6, len: 1.6 },       // 加速帶：踩到之後 time 秒內射速 × rate
+  sway: { amp: 0.3, speed: 1.5 },                // 遊走方陣：左右擺幅（路面闊度單位）同快慢
+  shield: 0.7,                                   // 盾兵嘅盾 = 同節路障耐力嘅幾多
+};
+/** 困難模式：同一批關卡，路障、盾、小首領、首領嘅數 × hp；掉落 × drop，另外送萬能碎片。通晒主線先開。 */
+export const HARD = { hp: 2.4, drop: 2, wild: 2 };
+
 export const STAGES = [
-  { base: 50, sections: 4, weapons: [1, 2], gain: 0.82, hard: 0.5, ref: 65.5, intro: '左右拖動，射磚加戰力，打爆路障攞大獎。' },
-  { base: 250, sections: 4, weapons: [1, 3], gain: 1, hard: 0.6, ref: 45.8, intro: '' },
-  { base: 1250, sections: 5, weapons: [2, 4], gain: 1, hard: 0.7, ref: 71.9, intro: '' },
-  { base: 6250, sections: 5, weapons: [3, 5], gain: 1, hard: 0.8, ref: 98.5, intro: '' },
-  { base: 31250, sections: 5, weapons: [4, 6], gain: 1, hard: 1.05, ref: 123.1, intro: '' },
-  { base: 156250, sections: 6, weapons: [5, 7], gain: 0.78, hard: 1.2, ref: 286.2, intro: '' },
-  { base: 781250, sections: 6, weapons: [6, 8], gain: 0.78, hard: 0.95, ref: 240.2, intro: '' },
-  { base: 3906250, sections: 6, weapons: [7, 9], gain: 0.78, hard: 2.1, ref: 101.1, intro: '全部新嘢一齊嚟，節奏密咗。' },
-  { base: 19531250, sections: 6, weapons: [8, 10], gain: 0.78, hard: 2.0, ref: 157.4, intro: '最後一關之前嘅試煉。' },
-  { base: 97656250, sections: 6, weapons: [9, 12], gain: 0.78, hard: 2.6, ref: 158.9, intro: '' },
+  { base: 50, sections: 4, weapons: [1, 2], gain: 0.82, hard: 0.5, rec: 1, ref: 65.5, intro: '左右拖動，射磚加戰力，打爆路障攞大獎。' },
+  { base: 250, sections: 4, weapons: [1, 3], gain: 1, hard: 0.6, rec: 1.41, ref: 45.8, intro: '' },
+  { base: 1250, sections: 5, weapons: [2, 4], gain: 1, hard: 0.7, rec: 1.5, ref: 71.9, intro: '' },
+  { base: 6250, sections: 5, weapons: [3, 5], gain: 1, hard: 0.8, rec: 1.72, ref: 98.5, intro: '' },
+  { base: 31250, sections: 5, weapons: [4, 6], gain: 1, hard: 1.305, rec: 1.85, ref: 123.1, intro: '' },
+  { base: 156250, sections: 6, weapons: [5, 7], gain: 0.78, hard: 1.163, rec: 2.07, ref: 286.2, intro: '' },
+  { base: 781250, sections: 6, weapons: [6, 8], gain: 0.78, hard: 0.677, rec: 2.07, ref: 302.6, intro: '' },
+  { base: 3906250, sections: 6, weapons: [7, 9], gain: 0.78, hard: 1.885, rec: 2.17, ref: 112.6, intro: '全部新嘢一齊嚟，節奏密咗。' },
+  { base: 19531250, sections: 6, weapons: [8, 10], gain: 0.78, hard: 1.391, rec: 2.17, ref: 312.7, intro: '最後一關之前嘅試煉。' },
+  { base: 97656250, sections: 6, weapons: [9, 12], gain: 0.78, hard: 1.931, rec: 2.28, ref: 254.7, intro: '' },
+  // 第 11 至 20 關：基數每關 ×3（唔再 ×5，費事個數大到計唔準）；武器由高級開局
+  { base: 292968750, sections: 6, weapons: [10, 12], gain: 0.78, hard: 2.515, rec: 2.28, ref: 250, intro: '高塔入面嘅「蝕」識得郁：方陣會左右遊走。' },
+  { base: 878906250, sections: 6, weapons: [10, 12], gain: 0.78, hard: 2.677, rec: 2.28, ref: 250, intro: '' },
+  { base: 2636718750, sections: 6, weapons: [10, 12], gain: 0.78, hard: 2.356, rec: 2.41, ref: 250, intro: '' },
+  { base: 7910156250, sections: 6, weapons: [11, 12], gain: 0.78, hard: 2.486, rec: 2.44, ref: 250, intro: '' },
+  { base: 23730468750, sections: 7, weapons: [11, 12], gain: 0.78, hard: 2.801, rec: 2.58, ref: 250, intro: '高塔頂層。' },
+  { base: 71191406250, sections: 6, weapons: [11, 12], gain: 0.78, hard: 2.778, rec: 2.6, ref: 250, intro: '' },
+  { base: 213574218750, sections: 7, weapons: [11, 12], gain: 0.78, hard: 2.801, rec: 2.63, ref: 250, intro: '' },
+  { base: 640722656250, sections: 7, weapons: [12, 12], gain: 0.78, hard: 3.096, rec: 2.77, ref: 250, intro: '' },
+  { base: 1922167968750, sections: 7, weapons: [12, 12], gain: 0.78, hard: 3.151, rec: 2.8, ref: 250, intro: '' },
+  { base: 5766503906250, sections: 7, weapons: [12, 12], gain: 0.78, hard: 3.151, rec: 2.83, ref: 250, intro: '零點：一切「蝕」嘅起點。' },
 ];
 
 /**
@@ -48,7 +75,7 @@ export const STAGES = [
  */
 export const stageMates = (n) => ROSTER.filter((r) => !r.leader && r.joinAfter > 0 && n > r.joinAfter).map((r) => r.id).slice(0, MAX_MATES);
 /** 呢隊人嘅合共輸出係隊長一個人嘅幾多倍（1 = 冇隊員）：路障同小首領乘呢個數，有隊員都要打返咁耐。近距離加成當一半計。 */
-export const teamPower = (ids) => 1 + ids.reduce((sum, id) => { const b = ROSTER.find((r) => r.id === id)?.battle; return sum + (b ? b.share * (1 + b.near / 2) : 0); }, 0);
+export const teamPower = (ids) => 1 + ids.reduce((sum, id) => { const b = ROSTER.find((r) => r.id === id)?.battle; return sum + (b ? b.share * (1 + b.near / 2) + (b.drone?.share ?? 0) : 0); }, 0);
 
 /** 呢關有邊啲新嘢（已經出過嘅都計）。 */
 export const stageHas = (n, key) => n >= FEATURES[key].from;
@@ -67,7 +94,7 @@ export function stageNews(n) {
 }
 
 /** 呢關嘅形態 [開局, 關尾]（0 起計：0 = 形態 I）。每三關進化一次：第 3、6、9 關。 */
-export const stageForms = (n) => [Math.floor((n - 1) / 3), Math.floor(n / 3)];
+export const stageForms = (n) => [Math.min(3, Math.floor((n - 1) / 3)), Math.min(3, Math.floor(n / 3))];
 
 /**
  * 三條永久升級。level 0 = 冇買。
@@ -162,8 +189,8 @@ function killsPerSecond(lv) {
 }
 
 /** 生成第 n 關（1 起計）。同一個 n 每次生成都一樣。 */
-export function campaignStage(n) {
-  const S = STAGES[n - 1], pace = stagePace(n), K = S.sections, bossAt = pace.len, has = (k) => stageHas(n, k);
+export function campaignStage(n, mode = {}) { // mode.hard：困難模式（路障、盾、小首領、首領嘅數 × HARD.hp）
+  const S = STAGES[n - 1], pace = stagePace(n), K = S.sections, bossAt = pace.len, has = (k) => stageHas(n, k), HP = mode.hard ? HARD.hp : 1;
   const P = (at) => paceCurve(pace, at - pace.lead), timeline = [], TP = teamPower(stageMates(n)); // TP：呢關預計有幾多隊員火力，路障同小首領照乘
   // 方陣大細跟呢關嘅武器：大約係「專心射幾秒清得晒」嘅數，越後嘅節越大
   const kps = (killsPerSecond(S.weapons[0]) + killsPerSecond(S.weapons[1])) / 2;
@@ -172,24 +199,31 @@ export function campaignStage(n) {
     const elite = has('elite') && (i === 1 || (n >= 8 && i === 3));
     const lanes = kinds.map((kind, lane) => {
       if (kind === 'bricks') { const count = BRICK_COUNTS[i % BRICK_COUNTS.length]; return { type: 'bricks', n: lane === 2 && i === 0 ? 15 : count, pct: pace.brick / count }; }
-      if (kind === 'wall') { const pn = 3 + Math.min(2, Math.floor(i / 1.5)); return { type: 'barrier', hp: niceNumber(pace.wall * 2 * TP * paceCurve(pace, at - 9)), prize: { n: pn, pct: (1 + pace.prize) ** (1 / pn) - 1 } }; }
+      if (kind === 'wall') { const pn = 3 + Math.min(2, Math.floor(i / 1.5)); return { type: 'barrier', hp: niceNumber(pace.wall * 2 * TP * HP * paceCurve(pace, at - 9)), prize: { n: pn, pct: (1 + pace.prize) ** (1 / pn) - 1 } }; }
       // 精英：隻數少、每隻要打 tough 下、賞金 bounty 倍
       if (elite) return { type: 'phalanx', cols: 5, rows: Math.max(2, Math.round(rows / 4)), tough: 4, elite: true, bounty: 8 };
-      return { type: 'phalanx', cols, rows };
+      // 遊走方陣（第 11 關起，逢單數節）；盾兵方陣（第 13 關起，每三節一次）：前面一塊盾要先打爆
+      const extra = {};
+      if (has('sway') && i % 2 === 0) extra.sway = { ...MECH.sway, phase: i * 1.7 + lane };
+      if (has('shield') && i % 3 === 2) extra.shield = niceNumber(pace.wall * 2 * MECH.shield * TP * HP * paceCurve(pace, at - 9));
+      return { type: 'phalanx', cols, rows, ...extra };
     });
     // 闊方陣：第 5 節（磚、方陣、磚）改做「左邊兩條線一塊闊方陣、右邊磚」
     if (has('wide') && i % SECTION_KINDS.length === 4) { lanes[0] = { type: 'phalanx', cols: 17, rows: Math.max(3, Math.round(rows * 0.5)), x: -1 / 3 }; lanes[1] = null; }
     timeline.push({ at, type: 'section', lanes });
     // 危險地帶：喺有磚嗰條線前面一段（想執磚就要頂住扣戰力，或者等佢過咗先入）
     if (has('hazard') && (i % 3 === 0 || n >= 8)) { const lane = kinds.indexOf('bricks'); if (lanes[lane]) timeline.push({ at: at - 1.2, type: 'hazard', lane, len: 2.6, rate: 0.06 }); }
+    // 減速帶（第 12 關起）：喺方陣嗰條線前面——企喺度射方陣就射得慢；加速帶（第 14 關起）：喺路障嗰條線前面——踩完再打路障
+    if (has('slow') && i % 3 === 1) { const lane = kinds.indexOf('phalanx'); if (lane >= 0 && lanes[lane]) timeline.push({ at: at - 0.6, type: 'slow', lane, len: MECH.slow.len }); }
+    if (has('boost') && i % 2 === 1) { const lane = kinds.indexOf('wall'); if (lane >= 0 && lanes[lane]) timeline.push({ at: at - 3.4, type: 'boost', lane, len: MECH.boost.len }); }
     // 一排門（最後一排喺首領前面）；第 3 排位喺有小首領嘅關卡換成小首領
     const gat = 17 + 14 * i;
-    if (has('miniboss') && i === 2) timeline.push({ at: gat, type: 'miniboss', hp: niceNumber(pace.wall * 1.6 * TP * paceCurve(pace, gat - 9)), prize: 0.3 * S.gain });
+    if (has('miniboss') && i === 2) timeline.push({ at: gat, type: 'miniboss', hp: niceNumber(pace.wall * 1.6 * TP * HP * paceCurve(pace, gat - 9)), prize: 0.3 * S.gain });
     else timeline.push({ at: gat, type: 'gates', gates: GATE_KINDS[i % GATE_KINDS.length].map((op) => (op === 'mul' ? { op, val: pace.mul } : op === 'div' ? { op, val: INCOME.div } : { op, frac: op === 'add' ? pace.add : pace.sub, val: niceNumber((op === 'add' ? pace.add : pace.sub) * P(gat)), ...(op === 'add' && has('countdown') ? { decay: n >= 9 ? 0.16 : 0.11 } : {}) })) });
   }
   timeline.sort((a, b) => a.at - b.at);
   // 首領個數 = 基數 × ref（冇升級嘅自動試玩喺呢關打得走幾大嘅首領，實測）× hard
-  const boss = { at: bossAt, hp: niceNumber(S.base * S.ref * S.hard) };
+  const boss = { at: bossAt, hp: niceNumber(S.base * S.ref * S.hard * HP) };
   if (has('slam')) boss.slam = { every: n >= 9 ? 2.6 : 3.4, warn: 1.1, loss: 0.1 };
   if (has('twoPhase')) boss.phases = 2;
   return { id: n, len: bossAt, timeline, boss };
@@ -216,16 +250,69 @@ export function stageWeaponAt(n, pace, weaponMul = 1, plus = 0) {
  * @param {number} n
  * @param {{ power?: number, weapon?: number, income?: number }} [levels]
  */
-export function campaignNumbers(n, levels = {}) {
+export function campaignNumbers(n, levels = {}, bonus = {}, mode = {}) { // bonus.power：隊長養成（等級、星級）加幾多成開局戰力，同基地嘅開局戰力相乘
   const pace = stagePace(n), fx = upgradeEffects(levels), at = stageWeaponAt(n, pace, fx.weaponMul, fx.weaponPlus), from = STAGES[n - 1].weapons[0];
   // 進化門檻：開局已經係嗰個形態 = 0；呢關會進化 = 第 4／7／10 級武器嘅門檻（武器同形態一齊嚟）；其餘呢關去唔到 = Infinity
   const [f0, f1] = stageForms(n), evo = [1, 2, 3].map((f) => (f <= f0 ? 0 : f <= f1 ? at[3 * f] : Infinity));
   return {
     name: `stage${n}`, campaign: n, pace, contact: { each: 0.004, cap: 0.35 }, gateLoss: 0.5, weapons: true, weaponStep: 15, keep: true,
     gateShare: pace.gateShare, bounty: pace.bounty, income: fx.incomeMul, minWeapon: from - 1,
-    startPower: Math.round(pace.start * fx.startMul), weaponAt: at, thresholds: evo, stages: [campaignStage(n)],
+    startPower: Math.round(pace.start * fx.startMul * (1 + (bonus.power ?? 0))), weaponAt: at, thresholds: evo, stages: [campaignStage(n, mode)], hardMode: !!mode.hard,
   };
 }
 
 /** 建議戰力（地圖簡介用）：冇升級嘅開局戰力。 */
 export const stageBase = (n) => STAGES[n - 1].base;
+
+// ---------- 無盡模式 ----------
+/**
+ * 無盡模式：一波一波打落去，每波三節加一隻首領；打低首領就入下一波，直到輸為止。
+ *   每一波嘅數（磚、路障、首領）照「入呢一波嗰刻嘅實際戰力」定——所以比嘅唔係戰力有幾大，而係隊伍打得幾有效率（隊員輸出、爆發、武器、走位）。
+ *   首領個數 = 入波戰力 × ref × hard(波)，hard 每波大 step 倍：遲早會打唔過。
+ *   新嘢逐波加：第 2 波精英、第 3 波危險地帶同小首領出招、第 4 波遊走方陣、第 5 波減速帶、第 6 波盾兵、第 7 波加速帶。
+ */
+export const ENDLESS = { start: 500, sections: 3, ref: 60, hard: 0.15, step: 1.22, weaponStep: 6, unlockAfter: 5 };
+const ENDLESS_FROM = { elite: 2, hazard: 3, slam: 3, sway: 4, slow: 5, shield: 6, boost: 7, countdown: 4 };
+
+/** 無盡模式第 w 波（1 起計）嘅關卡：start = 入呢波嗰刻嘅戰力，offset = 已經行咗幾遠（時間線由呢度接落去）。 */
+export function endlessWave(w, start = ENDLESS.start, offset = 0) {
+  const K = ENDLESS.sections, len = 8 + 14 * K, g = 0.78, has = (k) => w >= ENDLESS_FROM[k];
+  const pace = { live: true, len, start, end: start * INCOME.grow ** (K / 6), brick: INCOME.brick * g, prize: INCOME.prize * g, add: INCOME.add * g, sub: INCOME.sub, mul: 1 + (INCOME.mul - 1) * g, wall: 0.2, boss: 0, gateShare: INCOME.gateShare, bounty: INCOME.bounty * g, lead: 3 };
+  const P = (at) => paceCurve(pace, at - pace.lead), timeline = [], TP = teamPower(MATES_ALL()), lv = Math.min(WEAPONS.length, 3 + w), kps = killsPerSecond(lv);
+  for (let i = 0; i < K; i++) {
+    const j = (w - 1) * K + i, at = 8 + 14 * i, kinds = SECTION_KINDS[j % SECTION_KINDS.length], cols = j % 2 ? 8 : 9, rows = Math.max(4, Math.min(50, Math.round(kps * (3.5 + 0.5 * i) / cols)));
+    const lanes = kinds.map((kind, lane) => {
+      if (kind === 'bricks') { const count = BRICK_COUNTS[j % BRICK_COUNTS.length]; return { type: 'bricks', n: count, pct: pace.brick / count }; }
+      if (kind === 'wall') { const pn = 3 + (i % 2); return { type: 'barrier', hp: niceNumber(pace.wall * 2 * TP * paceCurve(pace, at - 9)), prize: { n: pn, pct: (1 + pace.prize) ** (1 / pn) - 1 } }; }
+      if (has('elite') && i === 1) return { type: 'phalanx', cols: 5, rows: Math.max(2, Math.round(rows / 4)), tough: 4, elite: true, bounty: 8 };
+      const extra = {};
+      if (has('sway') && j % 2 === 0) extra.sway = { ...MECH.sway, phase: j * 1.7 + lane };
+      if (has('shield') && j % 3 === 2) extra.shield = niceNumber(pace.wall * 2 * MECH.shield * TP * paceCurve(pace, at - 9));
+      return { type: 'phalanx', cols, rows, ...extra };
+    });
+    timeline.push({ at: offset + at, type: 'section', lanes });
+    if (has('hazard') && j % 2 === 0) { const lane = kinds.indexOf('bricks'); if (lane >= 0) timeline.push({ at: offset + at - 1.2, type: 'hazard', lane, len: 2.6, rate: 0.06 }); }
+    if (has('slow') && j % 3 === 1) { const lane = kinds.indexOf('phalanx'); if (lane >= 0) timeline.push({ at: offset + at - 0.6, type: 'slow', lane, len: MECH.slow.len }); }
+    if (has('boost') && j % 2 === 1) { const lane = kinds.indexOf('wall'); if (lane >= 0) timeline.push({ at: offset + at - 3.4, type: 'boost', lane, len: MECH.boost.len }); }
+    const gat = 17 + 14 * i;
+    timeline.push({ at: offset + gat, type: 'gates', gates: GATE_KINDS[j % GATE_KINDS.length].map((op) => (op === 'mul' ? { op, val: pace.mul } : op === 'div' ? { op, val: INCOME.div } : { op, frac: op === 'add' ? pace.add : pace.sub, val: niceNumber((op === 'add' ? pace.add : pace.sub) * P(gat)), ...(op === 'add' && has('countdown') ? { decay: 0.11 } : {}) })) });
+  }
+  timeline.sort((a, b) => a.at - b.at);
+  const boss = { at: offset + len, hp: niceNumber(start * ENDLESS.ref * ENDLESS.hard * ENDLESS.step ** (w - 1)) };
+  if (has('slam')) boss.slam = { every: w >= 8 ? 2.6 : 3.4, warn: 1.1, loss: 0.1 };
+  return { id: 0, endless: true, wave: w, len: offset + len, timeline, boss };
+}
+const MATES_ALL = () => ROSTER.filter((r) => !r.leader).map((r) => r.id).slice(0, MAX_MATES);
+
+/** 無盡模式嘅成套數值（放入 COLUMN.numbers）。武器門檻：由開局戰力起每級大 weaponStep 倍（大約一波升一級）。 */
+export function endlessNumbers(levels = {}, bonus = {}) {
+  const fx = upgradeEffects(levels), start = Math.round(ENDLESS.start * fx.startMul * (1 + (bonus.power ?? 0))), g = 0.78;
+  const at = WEAPONS.map((_, i) => (i === 0 ? 1 : Math.round(ENDLESS.start * 2 * ENDLESS.weaponStep ** (i - 1) * fx.weaponMul)));
+  const pace = { live: true, len: 8 + 14 * ENDLESS.sections, start, end: start * 20, brick: INCOME.brick * g, prize: INCOME.prize * g, add: INCOME.add * g, sub: INCOME.sub, mul: 1 + (INCOME.mul - 1) * g, wall: 0.2, boss: 0, gateShare: INCOME.gateShare, bounty: INCOME.bounty * g, lead: 3 };
+  return {
+    name: 'endless', campaign: 0, endless: true, pace, contact: { each: 0.004, cap: 0.35 }, gateLoss: 0.5, weapons: true, weaponStep: 8, keep: true,
+    gateShare: pace.gateShare, bounty: pace.bounty, income: fx.incomeMul, minWeapon: 0,
+    startPower: start, weaponAt: at, thresholds: [at[3], at[6], at[9]], stages: [endlessWave(1, start, 0)],
+  };
+}
+

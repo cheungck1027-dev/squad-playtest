@@ -41,6 +41,13 @@ export const SOUNDS = {
   // ---- 隊員（040）：鈴嘅雙槍（短、高、密）、霧嘅刀氣（一下「嗖」）、新隊員入隊、三人接力爆發 ----
   mate_suzu: { group: 'shot', gap: 0.06, layers: [{ w: 'square', f: [1500, 900], t: 0.03, g: 0.045 }, { w: 'noise', f: 4200, hp: true, t: 0.02, g: 0.03 }] },
   mate_kiri: { group: 'shot', gap: 0.3, layers: [{ w: 'noise', f: [5200, 900], q: 2, t: 0.2, g: 0.1 }, { w: 'sine', f: [1400, 420], t: 0.18, g: 0.06 }, { w: 'triangle', f: 2640, t: 0.06, g: 0.04, d: 0.02 }] },
+  // 楯：衝鋒槍（低沉短促）、撐盾、擋下；燈：榴彈出膛、落地爆炸、無人機補槍
+  mate_tate: { group: 'shot', gap: 0.05, layers: [{ w: 'square', f: [640, 380], t: 0.04, g: 0.05 }, { w: 'noise', f: 2400, t: 0.03, g: 0.03 }] },
+  mate_akari: { group: 'shot', gap: 0.3, layers: [{ w: 'sine', f: [260, 90], t: 0.16, g: 0.16 }, { w: 'noise', f: 900, t: 0.08, g: 0.06 }] },
+  grenade: { group: 'event', gap: 0.15, layers: [{ w: 'noise', f: [1800, 200], t: 0.35, g: 0.22 }, { w: 'sine', f: [130, 45], t: 0.3, g: 0.24 }] },
+  drone: { group: 'shot', gap: 0.2, layers: [{ w: 'sine', f: [2200, 1500], t: 0.07, g: 0.05 }] },
+  shield_up: { group: 'event', gap: 0.5, layers: [{ w: 'sine', f: [330, 880], t: 0.3, g: 0.12 }, { w: 'triangle', f: 1320, t: 0.25, g: 0.05, d: 0.12 }] },
+  shield_block: { group: 'event', gap: 0.2, layers: [{ w: 'triangle', f: [1760, 880], t: 0.25, g: 0.2 }, { w: 'noise', f: 3000, hp: true, t: 0.12, g: 0.1 }, { w: 'sine', f: [220, 110], t: 0.3, g: 0.18 }] },
   join: { group: 'event', gap: 1, layers: [...up([523, 659, 784, 1047, 1319], 0.09, 'triangle', 0.22, 0.26), { w: 'sine', f: 2637, t: 0.5, g: 0.06, d: 0.45 }, ...up([262, 392, 523], 0.18, 'square', 0.06, 0.3)] },
   burst_relay: { group: 'event', gap: 0.5, layers: [{ w: 'square', f: [1500, 900], t: 0.1, g: 0.1 }, { w: 'noise', f: 4200, hp: true, t: 0.12, g: 0.08 }, { w: 'noise', f: [5200, 900], q: 2, t: 0.25, g: 0.14, d: 0.5 }, { w: 'sine', f: [1400, 420], t: 0.2, g: 0.08, d: 0.5 }, { w: 'noise', f: [400, 6000], t: 0.5, g: 0.14, d: 1.0 }, { w: 'sawtooth', f: [110, 880], t: 0.55, g: 0.16, d: 1.0 }, { w: 'sine', f: [80, 40], t: 0.5, g: 0.3, d: 1.5 }, { w: 'noise', f: 1200, t: 0.3, g: 0.18, d: 1.5 }] },
   // ---- 命中 ----

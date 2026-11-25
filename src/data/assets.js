@@ -50,7 +50,8 @@ export const ASSET_MANIFEST = {
   // 單主角版（頂視、三線長列）嘅主角：四個形態各一張主圖（片未播得嗰陣頂住；同片嘅 box 對齊）同一張進化特寫。
   // game/assets/ 入面係縮細版（主圖 683×1024、特寫 1024×683 嘅 WebP）；原檔喺 art/out/，冇縮細版先用原檔。邊套服裝睇 LEAD_ART。
   ...Object.fromEntries([1, 2, 3, 4].map((n) => [`falcon-f${n}-master`, [local(`${LEAD_ART.local}-f${n}-master.webp`), art(`${LEAD_ART.out}/f${n}-game-master-run.png`)]])),
-  ...Object.fromEntries([1, 2, 3, 4].map((n) => [`falcon-f${n}-cutin`, [local(`${LEAD_ART.local}-f${n}-cutin.webp`), art(`${LEAD_ART.out}/f${n}-cutin.png`)]])),
+  ...Object.fromEntries([1, 2, 3, 4].map((n) => [`falcon-f${n}-cutin`, n === 1 ? [local('falcon-v2-cutin.webp'), art('043-sexy-redesign/leader-front-alpha.png')] : // 形態 I 係新造型（043）：特寫由新立繪裁出嚟
+     [local(`${LEAD_ART.local}-f${n}-cutin.webp`), art(`${LEAD_ART.out}/f${n}-cutin.png`)]])),
   // 戰鬥風格效果
   'suzu-slash':         [squadArt('suzu-slash')],
   'akari-drone-back':   [squadArt('akari-drone-back')],
