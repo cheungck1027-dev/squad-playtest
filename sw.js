@@ -1,0 +1,23 @@
+// 數字突擊隊 service worker（由 tools/build.mjs 生成，唔好手改）。版本 15e9e2317f
+// 成個版本一個快取：安裝時落晒 CORE（等齊先算裝好）；有舊版行緊就等玩家喺遊戲入面答應先接手（唔會一半新一半舊）；其餘模型（REST）開咗遊戲之後喺背景落。
+// 全部用相對路徑：放喺網站根目錄或者子目錄都得。
+const VERSION = "15e9e2317f", CACHE = 'number-squad-' + VERSION;
+const CORE = ["index.html","app.js","manifest.webmanifest","assets/akari-v2-front.webp","assets/falcon-b-f2-cutin.webp","assets/falcon-b-f2-front.webp","assets/falcon-b-f3-cutin.webp","assets/falcon-b-f3-front.webp","assets/falcon-b-f4-cutin.webp","assets/falcon-b-f4-front.webp","assets/falcon-v2-cutin.webp","assets/falcon-v2-front.webp","assets/icons/apple-touch-180.png","assets/icons/favicon-48.png","assets/icons/icon-192.png","assets/icons/icon-512.png","assets/icons/maskable-512.png","assets/key-visual-v2.webp","assets/kiri-v2-front.webp","assets/models/barrier.glb","assets/models/boss.glb","assets/models/brick.glb","assets/models/falcon-b-f1.glb","assets/models/gate.glb","assets/models/grunt-d.glb","assets/models/grunt.glb","assets/models/leader-v2.glb","assets/models/prize.glb","assets/suzu-v2-front.webp","assets/tate-v2-front.webp"];
+const REST = ["assets/models/akari-v2.glb","assets/models/falcon-b-f2.glb","assets/models/falcon-b-f3.glb","assets/models/falcon-b-f4.glb","assets/models/kiri-v2.glb","assets/models/suzu-v2.glb","assets/models/tate-v2.glb"];
+self.addEventListener('install', (ev) => { ev.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' }))))); });
+self.addEventListener('activate', (ev) => { ev.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith('number-squad-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
+self.addEventListener('message', (ev) => {
+  if (ev.data === 'skip') self.skipWaiting();
+  if (ev.data === 'warm') ev.waitUntil(caches.open(CACHE).then(async (c) => { for (const u of REST) { try { if (!(await c.match(u))) await c.add(new Request(u, { cache: 'reload' })); } catch (e) { /* 落唔到就下次再試 */ } } }));
+});
+self.addEventListener('fetch', (ev) => {
+  const req = ev.request, url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  ev.respondWith(caches.open(CACHE).then(async (c) => {
+    const hit = (await c.match(req, { ignoreSearch: true })) || (req.mode === 'navigate' ? await c.match('index.html') : null);
+    if (hit) return hit;
+    const res = await fetch(req);
+    if (res.ok && url.pathname.startsWith(new URL('./', self.location).pathname)) c.put(req, res.clone());
+    return res;
+  }));
+});
