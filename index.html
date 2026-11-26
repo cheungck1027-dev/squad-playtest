@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#E9E4E8">
-<title>出擊吧！隼小隊</title>
+<title>千門戰姬</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="assets/icons/favicon-48.png">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-180.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="隼小隊">
+<meta name="apple-mobile-web-app-title" content="千門戰姬">
 <style>
   /* 遊戲係一條 9:16 嘅直幅，置中；平板同橫向嗰陣兩邊係斜紋邊框背景 */
   html,body{margin:0;height:100%;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
@@ -30,7 +30,7 @@
 <div id="rotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2" fill="currentColor" fill-opacity=".18"/><path d="M11 18.5h2"/></svg>請把手機轉為直向</div>
 <!-- 程式未落完之前先出標誌同一行字（慢網絡嗰陣唔好成個畫面黑晒）；main.js 一行就收起 -->
 <div id="boot" style="position:absolute;left:0;right:0;top:26%;text-align:center;pointer-events:none;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;font-weight:700">
-  <img src="assets/logo.webp" alt="出擊吧！隼小隊" style="width:min(74vw,41.6vh);height:auto;display:block;margin:0 auto">
+  <img src="assets/logo.webp" alt="千門戰姬" style="width:min(82vw,46vh);height:auto;display:block;margin:0 auto">
   <div style="margin-top:5vh;font-size:14px;letter-spacing:.3em;color:#8E6A39;font-weight:700">載入中…</div>
 </div>
 <!-- 3D 戰鬥畫面用：Three.js 係本機檔案，唔靠外網 -->
@@ -75,7 +75,7 @@ addEventListener('error', function (ev) {
 });
 addEventListener('unhandledrejection', function (ev) { if (window.__booted) { if (ev && ev.reason instanceof Error && !harmless(ev.reason)) crashed(ev.reason); } else loadFailed(); });
 </script>
-<script>window.__BUILD="46255196e2"</script>
-<script src="app.js?v=46255196e2" onerror="loadFailed()"></script>
+<script>window.__BUILD="707cc3e4f6"</script>
+<script src="app.js?v=707cc3e4f6" onerror="loadFailed()"></script>
 </body>
 </html>
