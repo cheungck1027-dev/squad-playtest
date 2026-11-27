@@ -27,17 +27,52 @@
   #version-check::backdrop{background:rgba(35,33,46,.87)}
   #version-check p{margin:0}
   #version-check button{margin-top:16px;min-height:44px;padding:0 24px;border:1px solid #cfb785;border-radius:6px;background:#3b3744;color:inherit;font:inherit}
+  @font-face{font-family:"PG Serif";src:url("assets/fonts/pg-serif.woff2") format("woff2");font-weight:400 900;font-style:normal;font-display:swap}
+  #boot{position:absolute;inset:0;margin:auto;width:min(100%,56.25vh);height:100%;container-type:size;pointer-events:none}
+  .game-cover,#meta .scr.game-cover{--cover-ink:#fff3df;--cover-line:#e5c995;--cover-side:6.5cqw;--cover-floor:calc(var(--sab,env(safe-area-inset-bottom,0px)) + clamp(14px,3cqh,40px));
+    position:absolute;inset:0;isolation:isolate;overflow:hidden;color:var(--cover-ink);background:linear-gradient(180deg,#4e487f,#625e9c 34%,#49405a 77%,#252130 96%);font-family:system-ui,sans-serif}
+  .cover-art{--art-w:clamp(100cqw,50cqh,115cqw);position:absolute;left:50%;width:var(--art-w);height:auto;max-width:none;transform:translateX(-50%);
+    top:max(1cqw,calc(var(--sat,env(safe-area-inset-top,0px)) - 1cqw),calc(100cqh - var(--art-w)*1.76889 - var(--cover-floor) - 3cqh));display:block;pointer-events:none;
+    mask-image:linear-gradient(to bottom,transparent,#000 7%,#000 87%,transparent);-webkit-mask-image:linear-gradient(to bottom,transparent,#000 7%,#000 87%,transparent)}
+  .game-cover::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#1e19373b,transparent 25%,transparent 75%,#24203088 97%)}
+  .cover-brand{position:absolute;z-index:1;left:var(--cover-side);top:calc(var(--sat,env(safe-area-inset-top,0px)) + clamp(15px,4.1cqh,52px));width:max-content;color:#fff1dc}
+  .cover-brand h1{margin:0;display:flex;align-items:center;gap:2.5cqw;font:600 clamp(40px,12.9cqw,82px)/1.14 "PG Serif","Songti TC",serif;letter-spacing:.018em;text-shadow:0 2px 10px #2e23433b}
+  .cover-seal{width:.42em;height:.55em;position:relative;display:inline-block;box-sizing:border-box;border:1px solid #e9c596;color:#ffe7be;background:#91575a;transform:rotate(3deg)}
+  .cover-seal::before,.cover-seal::after{content:"";position:absolute;top:19%;bottom:14%;width:21%;border:1px solid currentColor;border-bottom:0}
+  .cover-seal::before{left:16%}.cover-seal::after{right:16%;top:30%}
+  .cover-brand small{display:flex;align-items:center;gap:2.6cqw;margin:.7cqw 0 0 .4cqw;color:#f4dfbc;font:500 clamp(10px,2.7cqw,16px)/1.4 Georgia,serif;letter-spacing:.27em}
+  .cover-brand small::before{content:"";width:6.3cqw;height:1px;background:var(--cover-line)}
+  .cover-action,.cover-loading,.cover-boot-note{position:absolute;z-index:1;left:var(--cover-side);right:var(--cover-side);bottom:calc(var(--cover-floor) + 3.3cqh);text-align:center}
+  #meta .cover-action button{position:relative;display:inline-flex;min-height:48px;align-items:center;justify-content:center;gap:3cqw;padding:0 3cqw;color:var(--cover-ink);font:600 clamp(18px,5cqw,30px)/1.4 "PG Serif",serif;letter-spacing:.14em;text-shadow:0 1px 5px #211a2d}
+  .cover-action button::before,.cover-action button::after{content:"";width:clamp(18px,6.6cqw,42px);height:1px;background:linear-gradient(90deg,transparent,var(--cover-line))}
+  .cover-action button::after{transform:scaleX(-1)}
+  #meta .cover-action button:focus-visible{outline:1px solid var(--cover-line);outline-offset:2px;border-radius:2px}
+  #meta .cover-action button:active{color:#e9c68e}
+  .cover-footer{position:absolute;z-index:1;left:var(--cover-side);right:var(--cover-side);bottom:var(--cover-floor);display:flex;align-items:center;gap:3cqw;color:#e2d7cc;font:500 clamp(10px,2.7cqw,14px)/1.35 system-ui,sans-serif;font-variant-numeric:tabular-nums}
+  .cover-footer::after{content:"";order:1;flex:1;height:1px;background:#e4cda455}
+  .cover-footer .ver{order:2;letter-spacing:.08em}
+  .cover-loading,.cover-boot-note{color:var(--cover-ink);font:500 clamp(13px,3.2cqw,18px)/1.5 system-ui,sans-serif;letter-spacing:.09em}
+  .cover-loading{margin:auto;max-width:55cqw}.cover-loading label{display:flex;justify-content:space-between}.cover-loading label span{font-variant-numeric:tabular-nums}
+  .cover-tip{position:absolute;z-index:1;bottom:var(--cover-floor);left:var(--cover-side);right:var(--cover-side);text-align:center;font:500 clamp(11px,2.8cqw,15px)/1.45 system-ui,sans-serif;color:var(--cover-ink);text-shadow:0 1px 4px #242030}
+  .cover-loading:has(~ .cover-tip:not([hidden])){bottom:calc(var(--cover-floor) + 2.9em)}
+  .cover-loading progress{display:block;width:100%;height:2px;margin-top:8px;border:0;background:#fff3df42;color:var(--cover-line);appearance:none}
+  .cover-loading progress::-webkit-progress-bar{background:#fff3df42}.cover-loading progress::-webkit-progress-value{background:var(--cover-line)}.cover-loading progress::-moz-progress-bar{background:var(--cover-line)}
+  #meta .game-cover.in{animation:none}#meta .title.game-cover{cursor:pointer}
+  body:has(#boot) #version-check{inset:auto 0 calc(env(safe-area-inset-bottom,0px) + 6vh);margin:0 auto;background:#262232d9;color:#fff1dc;width:max-content;max-width:78vw;padding:8px 16px;font-size:14px}
+  body:has(#boot) #version-check:has(button[hidden]){background:transparent;border-color:transparent;text-shadow:0 1px 5px #211a2d}
+  body:has(#boot) #version-check::backdrop{background:transparent}body:has(#version-check[open]) #boot .cover-boot-note{visibility:hidden}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <dialog id="version-check" aria-labelledby="version-status"><p id="version-status" role="status" aria-live="polite">正在檢查遊戲版本…</p><button type="button" hidden>重新檢查</button></dialog>
 <div id="rotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2" fill="currentColor" fill-opacity=".18"/><path d="M11 18.5h2"/></svg>請把手機轉為直向</div>
-<!-- 程式未落完之前先出標誌同一行字（慢網絡嗰陣唔好成個畫面黑晒）；main.js 一行就收起 -->
-<div id="boot" style="position:absolute;left:0;right:0;top:26%;text-align:center;pointer-events:none;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;font-weight:700">
-  <img src="assets/logo.webp" alt="千門戰姬" style="width:min(82vw,46vh);height:auto;display:block;margin:0 auto">
-  <div style="margin-top:5vh;font-size:14px;letter-spacing:.3em;color:#8E6A39;font-weight:700">載入中…</div>
-</div>
+<template id="cover-artwork">
+  <img class="cover-art" src="assets/key-visual.webp" alt="" width="900" height="1592" draggable="false">
+  <header class="cover-brand"><h1>千門戰姬<i class="cover-seal" aria-hidden="true"></i></h1><small lang="en">THOUSAND GATES</small></header>
+</template>
+<div id="boot"><div class="game-cover"><span class="cover-boot-note">載入中…</span></div></div>
+<script>document.querySelector('#boot .game-cover').prepend(document.getElementById('cover-artwork').content.cloneNode(true));</script>
 <!-- 3D 戰鬥畫面用：Three.js 係本機檔案，唔靠外網 -->
 <!-- 有檔案載入唔到（例如本機伺服器一時間應付唔切）：自動重新載入一次；再唔得就出字叫玩家重新整理 -->
 <script>
@@ -80,7 +115,7 @@ addEventListener('error', function (ev) {
 });
 addEventListener('unhandledrejection', function (ev) { if (window.__booted) { if (ev && ev.reason instanceof Error && !harmless(ev.reason)) crashed(ev.reason); } else loadFailed(); });
 </script>
-<script>window.__BUILD="664b95c160"</script>
+<script>window.__BUILD="5561f1ea0a"</script>
 <script>// Inlined into the published HTML so a cached launch screen can check the server before loading any game code.
 function startVerifiedGame(bundle, integrity) {
   const gate = document.getElementById('version-check');
@@ -194,6 +229,6 @@ function startVerifiedGame(bundle, integrity) {
   check();
 }
 
-startVerifiedGame("app.js?v=664b95c160", "sha256-eogSBszUf4tcFx1KMKpEz746REYteyFrzTmCSDUmHP0=");</script>
+startVerifiedGame("app.js?v=5561f1ea0a", "sha256-sb9MURfuTk+XkC4u6QhhZo6/LMsdeWtCTRZ2pRIcORQ=");</script>
 </body>
 </html>
