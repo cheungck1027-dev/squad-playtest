@@ -23,10 +23,15 @@
   #rotate svg{width:44px;height:44px;color:#B98D52;animation:rot 1.6s ease-in-out infinite}
   @keyframes rot{0%,20%{transform:rotate(90deg)}60%,100%{transform:rotate(0)}}
   @media (orientation:landscape) and (max-height:480px){#rotate{display:flex}}
+  #version-check{margin:auto;width:min(79vw,300px);padding:24px 16px;border:1px solid #d1b783;border-radius:12px;background:#282738;color:#fff1d4;text-align:center;font:600 16px/1.6 system-ui,sans-serif}
+  #version-check::backdrop{background:rgba(35,33,46,.87)}
+  #version-check p{margin:0}
+  #version-check button{margin-top:16px;min-height:44px;padding:0 24px;border:1px solid #cfb785;border-radius:6px;background:#3b3744;color:inherit;font:inherit}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+<dialog id="version-check" aria-labelledby="version-status"><p id="version-status" role="status" aria-live="polite">正在檢查遊戲版本…</p><button type="button" hidden>重新檢查</button></dialog>
 <div id="rotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2" fill="currentColor" fill-opacity=".18"/><path d="M11 18.5h2"/></svg>請把手機轉為直向</div>
 <!-- 程式未落完之前先出標誌同一行字（慢網絡嗰陣唔好成個畫面黑晒）；main.js 一行就收起 -->
 <div id="boot" style="position:absolute;left:0;right:0;top:26%;text-align:center;pointer-events:none;font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif;font-weight:700">
@@ -75,7 +80,120 @@ addEventListener('error', function (ev) {
 });
 addEventListener('unhandledrejection', function (ev) { if (window.__booted) { if (ev && ev.reason instanceof Error && !harmless(ev.reason)) crashed(ev.reason); } else loadFailed(); });
 </script>
-<script>window.__BUILD="b7186359da"</script>
-<script src="app.js?v=b7186359da" onerror="loadFailed()"></script>
+<script>window.__BUILD="664b95c160"</script>
+<script>// Inlined into the published HTML so a cached launch screen can check the server before loading any game code.
+function startVerifiedGame(bundle, integrity) {
+  const gate = document.getElementById('version-check');
+  const status = gate.querySelector('p'), retry = gate.querySelector('button');
+  const worker = navigator.serviceWorker;
+  let busy = false, started = false;
+
+  async function latestBuild() {
+    const timer = new AbortController();
+    const timeout = setTimeout(() => timer.abort(), 12000);
+    try {
+      const response = await fetch('version.json?check=' + Date.now(), { cache: 'no-store', signal: timer.signal });
+      if (!response.ok) throw new Error('version unavailable');
+      const { build } = await response.json();
+      if (typeof build !== 'string' || !/^[a-f0-9]{10}$/.test(build)) throw new Error('invalid version');
+      return build;
+    } finally { clearTimeout(timeout); }
+  }
+
+  // An existing controller must have finished installing the desired release before we use its cached files.
+  function awaitController(reg, url) {
+    return new Promise((resolve, reject) => {
+      let installing;
+      const finish = error => {
+        clearTimeout(timeout);
+        worker.removeEventListener('controllerchange', inspect);
+        reg.removeEventListener('updatefound', inspect);
+        installing?.removeEventListener('statechange', inspect);
+        if (error) reject(error); else resolve();
+      };
+      const inspect = () => {
+        if (worker.controller?.scriptURL === url) return finish();
+        if (reg.installing && installing !== reg.installing) {
+          installing?.removeEventListener('statechange', inspect);
+          installing = reg.installing;
+          installing.addEventListener('statechange', inspect);
+        }
+        if (installing?.state === 'redundant') finish(new Error('installation interrupted'));
+        else if (!reg.installing && !reg.waiting && reg.active?.scriptURL !== url) finish(new Error('release unavailable'));
+      };
+      const timeout = setTimeout(() => finish(new Error('installation timed out')), 120000);
+      worker.addEventListener('controllerchange', inspect);
+      reg.addEventListener('updatefound', inspect);
+      inspect();
+    });
+  }
+
+  function loadBundle() {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = bundle;
+      script.integrity = integrity;
+      script.onload = resolve;
+      script.onerror = () => { script.remove(); reject(new Error('bundle unavailable')); };
+      document.head.append(script);
+    });
+  }
+
+  async function check(manual = false) {
+    if (busy) return;
+    busy = true;
+    retry.hidden = true;
+    status.textContent = '正在檢查遊戲版本…';
+    if (!gate.open) gate.showModal();
+    let installing = false;
+    try {
+      const latest = await latestBuild();
+      const url = new URL('./sw.js?v=' + latest, location.href).href;
+      const hasController = !!worker?.controller;
+      if (hasController && worker.controller.scriptURL !== url) {
+        installing = true;
+        status.textContent = '正在更新遊戲…';
+        const reg = await worker.register(url, { scope: './', updateViaCache: 'none' });
+        await awaitController(reg, url);
+        const confirmed = await latestBuild();
+        if (latest !== confirmed) { location.reload(); return; }
+      }
+      const page = new URL(location.href);
+      if (latest !== window.__BUILD) {
+        if (!manual && page.searchParams.get('__release')?.split('.')[0] === latest) throw new Error('release not ready');
+        page.searchParams.set('__release', latest + '.' + Date.now());
+        location.replace(page.href);
+        return;
+      }
+      if (page.searchParams.has('__release')) {
+        page.searchParams.delete('__release');
+        history.replaceState(history.state, '', page.href);
+      }
+      if (!started) {
+        status.textContent = '正在載入遊戲…';
+        // A first visit can play the verified bundle while the optional device cache is being prepared.
+        if (worker && !hasController) worker.register(url, { scope: './', updateViaCache: 'none' })
+          .then(() => worker.ready).then(r => r.active?.postMessage('warm')).catch(() => {});
+        await loadBundle();
+        started = true;
+        worker?.controller?.postMessage('warm');
+      }
+      gate.close();
+    } catch {
+      status.textContent = installing ? '更新未完成，請連線後再試。' : '未能確認最新版本，請檢查網絡後再試。';
+      retry.hidden = false;
+    } finally { busy = false; }
+  }
+
+  gate.addEventListener('cancel', ev => ev.preventDefault());
+  gate.addEventListener('keydown', ev => ev.stopPropagation());
+  retry.addEventListener('click', () => check(true));
+  addEventListener('online', () => { if (gate.open) check(true); });
+  addEventListener('pageshow', ev => { if (ev.persisted) check(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+  check();
+}
+
+startVerifiedGame("app.js?v=664b95c160", "sha256-eogSBszUf4tcFx1KMKpEz746REYteyFrzTmCSDUmHP0=");</script>
 </body>
 </html>
